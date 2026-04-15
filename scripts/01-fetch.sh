@@ -16,7 +16,12 @@ mkdir -p "$DATA_DIR"
 cd "$DATA_DIR"
 
 echo "[fetch] downloading md5 from ${MD5_URL}"
-curl -sSL -o europe-latest.osm.pbf.md5 "$MD5_URL"
+curl -sSL -o europe-latest.osm.pbf.md5.raw "$MD5_URL"
+# Geofabrik's .md5 references the dated filename (e.g. europe-260414.osm.pbf),
+# but we save locally as europe-latest.osm.pbf. Rewrite the filename column
+# so md5sum -c works against our local name.
+EXPECTED_HASH="$(awk '{print $1}' europe-latest.osm.pbf.md5.raw)"
+echo "${EXPECTED_HASH}  europe-latest.osm.pbf" > europe-latest.osm.pbf.md5
 
 if [[ -f europe-latest.osm.pbf ]]; then
   if md5sum -c europe-latest.osm.pbf.md5 >/dev/null 2>&1; then

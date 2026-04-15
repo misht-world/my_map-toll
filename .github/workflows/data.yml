@@ -64,8 +64,39 @@ jobs:
       - name: Run interpreter tests (fail fast)
         run: npm test
 
-      - name: Build tiles
-        run: npm run data:build
+      - name: Show free disk before build
+        run: df -h /
+
+      # Run the pipeline steps individually so we can reclaim disk between
+      # them. The raw ~32 GB europe-latest.osm.pbf is only needed for the
+      # filter step; we delete it before normalize + tippecanoe run.
+      - name: Fetch OSM extract
+        run: npm run data:fetch
+
+      - name: Filter to relevant tags
+        run: npm run data:filter
+
+      - name: Free the raw PBF (not needed from here on)
+        run: |
+          rm -f data/europe-latest.osm.pbf data/europe-latest.osm.pbf.md5 data/europe-latest.osm.pbf.md5.raw
+          df -h /
+
+      - name: Normalize tags
+        run: |
+          osmium export data/europe-filtered.osm.pbf -f geojsonseq --overwrite \
+            | node --experimental-strip-types packages/tile-builder/src/normalize.ts \
+            > data/europe-enriched.geojsonseq
+
+      - name: Build tiles (tippecanoe + pmtiles)
+        run: |
+          tippecanoe --force --layer=restrictions \
+            --minimum-zoom=3 --maximum-zoom=12 \
+            --drop-densest-as-needed --coalesce-densest-as-needed \
+            --read-parallel --no-tile-size-limit \
+            --attribute-type=osm_id:int \
+            -o data/europe-overlay.mbtiles data/europe-enriched.geojsonseq
+          pmtiles convert --force data/europe-overlay.mbtiles data/europe-overlay.pmtiles
+          rm -f data/europe-overlay.mbtiles data/europe-enriched.geojsonseq data/europe-filtered.osm.pbf
 
       - name: Report artifact size
         run: ls -lh data/europe-overlay.pmtiles
