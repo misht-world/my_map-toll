@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>My Map Toll — OSM road restrictions (Europe)</title>
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.0/dist/maplibre-gl.css" />
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div id="map"></div>
+
+    <aside id="panel">
+      <header>
+        <h1>Road restrictions</h1>
+        <p class="sub">OpenStreetMap · Europe · MVP</p>
+      </header>
+
+      <section class="block">
+        <h2>Layers</h2>
+        <label><input type="checkbox" id="toggle-toll" checked /> Toll (cars)</label>
+        <label><input type="checkbox" id="toggle-chains" checked /> Snow chains</label>
+      </section>
+
+      <section class="block">
+        <h2>Legend</h2>
+        <ul class="legend">
+          <li><span class="sw sw-toll-yes"></span> Toll: explicit</li>
+          <li><span class="sw sw-toll-cond"></span> Toll: conditional</li>
+          <li><span class="sw sw-toll-amb"></span> Toll: ambiguous</li>
+          <li><span class="sw sw-chains-yes"></span> Chains: explicit</li>
+          <li><span class="sw sw-chains-cond"></span> Chains: conditional</li>
+          <li><span class="sw sw-chains-amb"></span> Chains: ambiguous</li>
+        </ul>
+        <p class="hint">
+          <strong>Conditional</strong> — restriction present, but only active under
+          time/date rules recorded in OSM. Season logic is not yet applied.<br />
+          <strong>Ambiguous</strong> — OSM signals restriction but does not fully
+          specify it (e.g. <code>winter_road=yes</code>). Data kept, not hidden.
+        </p>
+      </section>
+
+      <section class="block">
+        <h2>Search by coordinates</h2>
+        <form id="coord-form">
+          <input id="coord-input" type="text" placeholder="47.4979, 19.0402" />
+          <button type="submit">Go</button>
+        </form>
+        <p id="coord-error" class="error" hidden></p>
+      </section>
+
+      <section class="block">
+        <button id="share-link" type="button">Copy shareable link</button>
+        <p id="cursor-coords" class="cursor"></p>
+      </section>
+
+      <footer>
+        Data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> (ODbL).
+        Basemap by <a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a>.
+      </footer>
+    </aside>
+
+    <div id="popup-template" hidden></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

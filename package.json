@@ -1,0 +1,27 @@
+{
+  "name": "my-map-toll",
+  "private": true,
+  "version": "0.1.0",
+  "description": "MVP: OpenStreetMap-based web map of road restrictions (toll roads for cars, snow-chain requirements) across Europe.",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @mmt/web",
+    "build": "npm run build -w @mmt/web",
+    "test": "npm run test -w @mmt/interpreter",
+    "data:fetch": "bash scripts/01-fetch.sh",
+    "data:filter": "bash scripts/02-filter.sh",
+    "data:normalize": "npm run normalize -w @mmt/tile-builder",
+    "data:tile": "bash scripts/04-tile.sh",
+    "data:publish": "bash scripts/05-publish.sh",
+    "data:build": "npm run data:fetch && npm run data:filter && npm run data:normalize && npm run data:tile"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
