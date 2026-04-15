@@ -63,7 +63,29 @@ VITE_BASEMAP_STYLE=https://tiles.openfreemap.org/styles/positron
 VITE_OVERPASS_URL=https://overpass-api.de/api/interpreter
 ```
 
-## Update the data (once-a-month workflow)
+## Automated builds (recommended)
+
+Both the data pipeline and the website are built by GitHub Actions on
+GitHub's servers — your PC is not involved.
+
+- **`.github/workflows/data.yml`** — rebuilds the Europe PMTiles overlay.
+  Runs monthly on a schedule, or manually from the Actions tab
+  ("Run workflow" button). Frees ~30 GB of disk on the runner before
+  downloading the Geofabrik extract. Publishes the result as a GitHub
+  Release; the web app loads it from `releases/latest/download/…`.
+- **`.github/workflows/pages.yml`** — rebuilds the static website on
+  every push to `main` and deploys it to GitHub Pages.
+
+One-time setup in the GitHub repo UI:
+
+1. **Settings → Pages → Build and deployment → Source**: set to
+   *GitHub Actions* (not branch-based).
+2. **Actions → Build data tiles → Run workflow**: run it once to produce
+   the first PMTiles release (~40–70 min).
+
+After that, everything is automatic.
+
+## Update the data manually (optional)
 
 Prerequisites (one-time setup):
 

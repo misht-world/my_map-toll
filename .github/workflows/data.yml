@@ -1,0 +1,83 @@
+name: Build data tiles
+
+# Runs the full OSM → PMTiles pipeline on a GitHub-hosted runner.
+# Manual trigger ("Run workflow" button on the Actions tab) + monthly cron.
+# Publishes europe-overlay.pmtiles to a GitHub Release (tag: data-YYYY-MM-DD).
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 04:17 UTC on the 1st of each month. Offset from the hour to be polite.
+    - cron: "17 4 1 * *"
+
+permissions:
+  contents: write  # needed to create/upload releases
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Default GH runners have ~14 GB free disk. europe-latest.osm.pbf is ~30 GB.
+      # This action removes preinstalled Android SDK, .NET, etc — frees ~30 GB.
+      - name: Free up disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          swap-storage: true
+
+      - name: Install system tools (osmium, tippecanoe)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y osmium-tool tippecanoe
+
+      - name: Install go-pmtiles CLI
+        run: |
+          VERSION="1.22.2"
+          curl -fsSL -o pmtiles.tar.gz \
+            "https://github.com/protomaps/go-pmtiles/releases/download/v${VERSION}/go-pmtiles_${VERSION}_Linux_x86_64.tar.gz"
+          tar xzf pmtiles.tar.gz pmtiles
+          sudo mv pmtiles /usr/local/bin/pmtiles
+          pmtiles version
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install npm deps
+        run: npm ci
+
+      - name: Run interpreter tests (fail fast)
+        run: npm test
+
+      - name: Build tiles
+        run: npm run data:build
+
+      - name: Report artifact size
+        run: ls -lh data/europe-overlay.pmtiles
+
+      - name: Publish to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # GitHub's /releases/latest/download/<file> URL redirects to the
+          # most recent release automatically, so a single dated release
+          # per build is enough — no "latest" alias needed.
+          TAG="data-$(date +%Y-%m-%d)"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" data/europe-overlay.pmtiles --clobber
+          else
+            gh release create "$TAG" \
+              --title "Data snapshot $TAG" \
+              --notes "PMTiles overlay built from europe-latest.osm.pbf on $(date -u +%Y-%m-%dT%H:%M:%SZ)." \
+              data/europe-overlay.pmtiles
+          fi
