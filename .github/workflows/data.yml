@@ -14,8 +14,6 @@ permissions:
   contents: write  # needed to create/upload releases
 
 env:
-  # Opt-in to Node.js 24 for JavaScript-based actions (Node 20 is deprecated
-  # and will be removed from runners on 2026-09-16).
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
@@ -67,9 +65,6 @@ jobs:
       - name: Show free disk before build
         run: df -h /
 
-      # Run the pipeline steps individually so we can reclaim disk between
-      # them. The raw ~32 GB europe-latest.osm.pbf is only needed for the
-      # filter step; we delete it before normalize + tippecanoe run.
       - name: Fetch OSM extract
         run: npm run data:fetch
 
@@ -81,11 +76,38 @@ jobs:
           rm -f data/europe-latest.osm.pbf data/europe-latest.osm.pbf.md5 data/europe-latest.osm.pbf.md5.raw
           df -h /
 
+      # ---- Diagnostic split: export and normalize are separate steps ----
+
+      - name: Check filtered PBF
+        run: |
+          ls -lh data/europe-filtered.osm.pbf
+          echo "--- osmium fileinfo ---"
+          osmium fileinfo -e data/europe-filtered.osm.pbf || true
+
+      - name: Export filtered PBF to GeoJSONSeq
+        run: |
+          osmium export data/europe-filtered.osm.pbf -f geojsonseq -o data/europe-raw.geojsonseq --overwrite
+          echo "Raw GeoJSONSeq size:"
+          ls -lh data/europe-raw.geojsonseq
+          echo "First 3 lines:"
+          head -3 data/europe-raw.geojsonseq || true
+          echo "Line count:"
+          wc -l < data/europe-raw.geojsonseq
+
       - name: Normalize tags
         run: |
-          osmium export data/europe-filtered.osm.pbf -f geojsonseq --overwrite \
-            | npx tsx packages/tile-builder/src/normalize.ts \
+          npx tsx packages/tile-builder/src/normalize.ts \
+            < data/europe-raw.geojsonseq \
             > data/europe-enriched.geojsonseq
+          echo "Enriched GeoJSONSeq size:"
+          ls -lh data/europe-enriched.geojsonseq
+          echo "First 3 lines:"
+          head -3 data/europe-enriched.geojsonseq || true
+          echo "Line count:"
+          wc -l < data/europe-enriched.geojsonseq
+
+      - name: Clean up raw export (save disk)
+        run: rm -f data/europe-raw.geojsonseq data/europe-filtered.osm.pbf
 
       - name: Build tiles (tippecanoe + pmtiles)
         run: |
@@ -96,7 +118,7 @@ jobs:
             --attribute-type=osm_id:int \
             -o data/europe-overlay.mbtiles data/europe-enriched.geojsonseq
           pmtiles convert --force data/europe-overlay.mbtiles data/europe-overlay.pmtiles
-          rm -f data/europe-overlay.mbtiles data/europe-enriched.geojsonseq data/europe-filtered.osm.pbf
+          rm -f data/europe-overlay.mbtiles data/europe-enriched.geojsonseq
 
       - name: Report artifact size
         run: ls -lh data/europe-overlay.pmtiles
@@ -105,9 +127,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # GitHub's /releases/latest/download/<file> URL redirects to the
-          # most recent release automatically, so a single dated release
-          # per build is enough — no "latest" alias needed.
           TAG="data-$(date +%Y-%m-%d)"
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" data/europe-overlay.pmtiles --clobber
