@@ -43,6 +43,10 @@ const map = new MLMap({
 });
 
 map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+map.addControl(new maplibregl.GeolocateControl({
+  positionOptions: { enableHighAccuracy: true },
+  trackUserLocation: true,
+}), "top-right");
 map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-right");
 
 map.on("load", () => {
@@ -95,6 +99,16 @@ map.on("mouseenter", interactiveLayers, () => {
 });
 map.on("mouseleave", interactiveLayers, () => {
   map.getCanvas().style.cursor = "";
+});
+
+// ---------------------------------------------------------------------------
+// Mobile panel toggle
+// ---------------------------------------------------------------------------
+const panel = document.getElementById("panel") as HTMLElement;
+const panelToggle = document.getElementById("panel-toggle") as HTMLButtonElement;
+panelToggle.addEventListener("click", () => {
+  panel.classList.toggle("collapsed");
+  panelToggle.textContent = panel.classList.contains("collapsed") ? "☰" : "✕";
 });
 
 // ---------------------------------------------------------------------------

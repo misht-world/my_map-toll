@@ -69,10 +69,23 @@ try {
 
     const rawProps = feat.properties ?? {};
 
-    // osmium export puts @id and @type in properties (with --add-unique-id=type_id)
-    // or as top-level "id" on the Feature. Handle both.
-    const osmIdRaw = rawProps["@id"] ?? feat.id;
-    const osmTypeRaw = rawProps["@type"];
+    // osmium export --add-unique-id=type_id puts the OSM id as Feature.id
+    // in the format "w12345" (way) or "r12345" (relation).
+    // Parse that into separate type + numeric id.
+    let osmType: "way" | "relation" = "way";
+    let osmId = 0;
+    const featId = feat.id ?? rawProps["@id"];
+    if (typeof featId === "string") {
+      if (featId.startsWith("r")) {
+        osmType = "relation";
+        osmId = parseInt(featId.slice(1), 10) || 0;
+      } else if (featId.startsWith("w")) {
+        osmType = "way";
+        osmId = parseInt(featId.slice(1), 10) || 0;
+      }
+    } else if (typeof featId === "number") {
+      osmId = featId;
+    }
 
     const tags: Record<string, string> = {};
     for (const [k, v] of Object.entries(rawProps)) {
@@ -83,8 +96,8 @@ try {
 
     // Log first feature for debugging in CI
     if (counters.total === 1) {
+      stderr.write(`[normalize] first feature id: ${JSON.stringify(feat.id)}\n`);
       stderr.write(`[normalize] first feature keys: ${JSON.stringify(Object.keys(rawProps))}\n`);
-      stderr.write(`[normalize] first feature tags: ${JSON.stringify(tags)}\n`);
     }
 
     const toll = interpretToll(tags, parseWhen);
@@ -95,14 +108,6 @@ try {
     const tollIncluded = toll.status !== "unknown";
     const chainsIncluded = chains.status !== "unknown";
     if (!tollIncluded && !chainsIncluded) continue;
-
-    const osmType = osmTypeRaw === "relation" ? "relation" : "way";
-    const osmId =
-      typeof osmIdRaw === "number"
-        ? osmIdRaw
-        : typeof osmIdRaw === "string"
-          ? Number.parseInt(osmIdRaw, 10)
-          : 0;
 
     const outProps: TileProperties = {
       osm_type: osmType,

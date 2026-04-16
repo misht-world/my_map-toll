@@ -12,9 +12,13 @@
 
     <aside id="panel">
       <header>
-        <h1>Road restrictions</h1>
-        <p class="sub">OpenStreetMap · Europe · MVP</p>
+        <div>
+          <h1>Road restrictions</h1>
+          <span class="sub">OpenStreetMap · Europe · MVP</span>
+        </div>
+        <button id="panel-toggle" aria-label="Toggle panel">☰</button>
       </header>
+      <div id="panel-body">
 
       <section class="block">
         <h2>Layers</h2>
@@ -58,6 +62,7 @@
         Data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> (ODbL).
         Basemap by <a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a>.
       </footer>
+      </div><!-- /panel-body -->
     </aside>
 
     <div id="popup-template" hidden></div>

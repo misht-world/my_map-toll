@@ -86,7 +86,9 @@ jobs:
 
       - name: Export filtered PBF to GeoJSONSeq
         run: |
-          osmium export data/europe-filtered.osm.pbf -f geojsonseq -o data/europe-raw.geojsonseq --overwrite
+          osmium export data/europe-filtered.osm.pbf -f geojsonseq \
+            --add-unique-id=type_id \
+            -o data/europe-raw.geojsonseq --overwrite
           echo "Raw GeoJSONSeq size:"
           ls -lh data/europe-raw.geojsonseq
           echo "First 3 lines:"

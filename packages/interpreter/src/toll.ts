@@ -18,6 +18,18 @@ export function interpretToll(
   tags: OsmTags,
   parseWhen: (expr: string) => unknown = () => null,
 ): TollResult {
+  // If the road is not accessible to cars at all, there is no relevant toll.
+  // These access tags take priority over any toll tags.
+  const access       = tags["access"];
+  const vehicle      = tags["vehicle"];
+  const motorVehicleAccess = tags["motor_vehicle"];
+  const motorcycleAccess   = tags["motorcar"];
+
+  // "no" without an exception means cars cannot use the road → not our map.
+  if (access === "no" || vehicle === "no" || motorVehicleAccess === "no" || motorcycleAccess === "no") {
+    return { status: "unknown", reason_code: null };
+  }
+
   const motorcar = tags["toll:motorcar"];
   const motorVehicle = tags["toll:motor_vehicle"];
   const generic = tags["toll"];
