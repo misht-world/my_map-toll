@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  # Also triggered by data workflow after a successful tile build
+  workflow_run:
+    workflows: ["Build data tiles"]
+    types: [completed]
 
 permissions:
   contents: read
@@ -15,12 +19,12 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # Opt-in to Node.js 24 for JavaScript-based actions (Node 20 is deprecated
-  # and will be removed from runners on 2026-09-16).
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   build:
+    # For workflow_run trigger, only run if data workflow succeeded
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,10 +40,23 @@ jobs:
         run: npm test
 
       - name: Build site
-        # Vite base path = repo name so assets resolve on github.io/<repo>/
         env:
+          # PMTiles is served from the same Pages origin — no CORS/redirect issues
           VITE_BASE: "/my_map-toll/"
+          VITE_PMTILES_URL: "/my_map-toll/europe-overlay.pmtiles"
         run: npm run build
+
+      # Download the latest PMTiles release and include it in the Pages deploy
+      - name: Download latest PMTiles
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Fetching latest PMTiles release asset…"
+          gh release download \
+            --pattern "europe-overlay.pmtiles" \
+            --dir packages/web/dist \
+            2>&1 || echo "WARNING: No release found yet — deploying without PMTiles (layers will be empty until first data build completes)"
+          ls -lh packages/web/dist/europe-overlay.pmtiles 2>/dev/null || true
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
