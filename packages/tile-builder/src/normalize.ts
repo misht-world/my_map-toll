@@ -54,11 +54,14 @@ try {
   const rl = createInterface({ input: stdin, crlfDelay: Infinity });
 
   for await (const line of rl) {
-    if (!line.trim()) continue;
+    // GeoJSONSeq (RFC 8142) prefixes each record with ASCII Record
+    // Separator 0x1E. Strip it (and any other whitespace) before parsing.
+    const cleaned = line.replace(/^\x1e/, "").trim();
+    if (!cleaned) continue;
     counters.total++;
     let feat: InputFeature;
     try {
-      feat = JSON.parse(line);
+      feat = JSON.parse(cleaned);
     } catch {
       counters.parseErrors++;
       continue;
