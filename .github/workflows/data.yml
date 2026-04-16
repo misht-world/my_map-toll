@@ -84,7 +84,7 @@ jobs:
       - name: Normalize tags
         run: |
           osmium export data/europe-filtered.osm.pbf -f geojsonseq --overwrite \
-            | node --experimental-strip-types packages/tile-builder/src/normalize.ts \
+            | npx tsx packages/tile-builder/src/normalize.ts \
             > data/europe-enriched.geojsonseq
 
       - name: Build tiles (tippecanoe + pmtiles)

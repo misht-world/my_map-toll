@@ -20,7 +20,7 @@ fi
 
 echo "[tile] normalizing tags → enriched GeoJSONSeq"
 osmium export "$IN" -f geojsonseq --overwrite \
-  | node --experimental-strip-types packages/tile-builder/src/normalize.ts \
+  | npx tsx packages/tile-builder/src/normalize.ts \
   > "$GEOJSONSEQ"
 
 echo "[tile] tippecanoe → mbtiles"
