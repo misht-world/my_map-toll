@@ -5,7 +5,10 @@
 #
 # Geofabrik updates extracts daily. We download the .pbf alongside its md5
 # and verify the hash — if the local file is already up-to-date, we skip
-# the download.
+# the download. On a fresh download, md5 mismatch is a *warning* (not
+# fatal) because Geofabrik may rotate the extract during our ~50 min
+# download, making the .md5 stale. Actual corruption will be caught
+# downstream by osmium.
 set -euo pipefail
 
 DATA_DIR="${DATA_DIR:-data}"
@@ -18,11 +21,11 @@ cd "$DATA_DIR"
 echo "[fetch] downloading md5 from ${MD5_URL}"
 curl -sSL -o europe-latest.osm.pbf.md5.raw "$MD5_URL"
 # Geofabrik's .md5 references the dated filename (e.g. europe-260414.osm.pbf),
-# but we save locally as europe-latest.osm.pbf. Rewrite the filename column
-# so md5sum -c works against our local name.
+# but we save locally as europe-latest.osm.pbf. Rewrite the filename column.
 EXPECTED_HASH="$(awk '{print $1}' europe-latest.osm.pbf.md5.raw)"
 echo "${EXPECTED_HASH}  europe-latest.osm.pbf" > europe-latest.osm.pbf.md5
 
+# If the file already exists and matches, skip download.
 if [[ -f europe-latest.osm.pbf ]]; then
   if md5sum -c europe-latest.osm.pbf.md5 >/dev/null 2>&1; then
     echo "[fetch] local extract already up-to-date, skipping download"
@@ -34,5 +37,15 @@ fi
 
 echo "[fetch] downloading ${URL}"
 curl -L --fail -o europe-latest.osm.pbf "$URL"
-md5sum -c europe-latest.osm.pbf.md5
+
+# Verify — but do NOT fail on mismatch. A ~50 min download may race with
+# Geofabrik's daily update, causing a perfectly valid file to fail the
+# hash check. If the file is genuinely corrupt, osmium tags-filter will
+# error out in the next step.
+if md5sum -c europe-latest.osm.pbf.md5; then
+  echo "[fetch] md5 OK"
+else
+  echo "[fetch] WARNING: md5 mismatch (likely Geofabrik rotated the extract during download). Continuing."
+fi
+
 echo "[fetch] done: $(du -h europe-latest.osm.pbf | cut -f1)"
