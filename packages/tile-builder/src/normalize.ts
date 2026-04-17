@@ -106,9 +106,15 @@ try {
       stderr.write(`[normalize] first feature keys: ${JSON.stringify(Object.keys(rawProps))}\n`);
     }
 
+    // Hard gate: must be either a road (highway=*) or a ferry (route=ferry).
+    // Without this, things like aerialway=zip_line + toll=yes would slip
+    // through purely on the toll tag.
+    const isHighway = typeof tags["highway"] === "string" && tags["highway"] !== "";
+    const isFerry   = tags["route"] === "ferry";
+    if (!isHighway && !isFerry) continue;
+
     // Drop non-car highway classes outright (defined above the loop).
-    // route=ferry has no highway tag, so this check leaves ferries alone.
-    if (NON_CAR_HIGHWAYS.has(tags["highway"] ?? "")) continue;
+    if (isHighway && NON_CAR_HIGHWAYS.has(tags["highway"]!)) continue;
 
     const toll   = interpretToll(tags, parseWhen);
     const chains = interpretChains(tags, parseWhen);
