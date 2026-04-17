@@ -48,6 +48,12 @@ const counters = {
   chains: { explicit: 0, conditional: 0, ambiguous: 0, unknown: 0 },
 };
 
+// Highway classes that never carry cars — dropped before any tag analysis.
+const NON_CAR_HIGHWAYS = new Set([
+  "footway", "path", "pedestrian", "steps", "cycleway", "bridleway",
+  "corridor", "platform", "via_ferrata", "elevator", "escalator",
+]);
+
 stderr.write("[normalize] starting…\n");
 
 try {
@@ -99,6 +105,10 @@ try {
       stderr.write(`[normalize] first feature id: ${JSON.stringify(feat.id)}\n`);
       stderr.write(`[normalize] first feature keys: ${JSON.stringify(Object.keys(rawProps))}\n`);
     }
+
+    // Drop non-car highway classes outright (defined above the loop).
+    // route=ferry has no highway tag, so this check leaves ferries alone.
+    if (NON_CAR_HIGHWAYS.has(tags["highway"] ?? "")) continue;
 
     const toll   = interpretToll(tags, parseWhen);
     const chains = interpretChains(tags, parseWhen);
