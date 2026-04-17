@@ -39,12 +39,26 @@ jobs:
       - name: Test
         run: npm test
 
+      # Identify the latest data release tag so we can both download
+      # the asset AND inject its name into the site as the data version.
+      - name: Resolve latest data release tag
+        id: data
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG=$(gh release list --limit 1 --json tagName -q '.[0].tagName' 2>/dev/null || echo "")
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Resolved data tag: '$TAG'"
+
       - name: Build site
         env:
           # PMTiles is served from the same Pages origin — no CORS/redirect issues
           VITE_BASE: "/my_map-toll/"
           VITE_PMTILES_URL: "/my_map-toll/europe-overlay.pmtiles"
-        run: npm run build
+          VITE_DATA_DATE: ${{ steps.data.outputs.tag }}
+        run: |
+          export VITE_BUILD_DATE="$(date -u +%Y-%m-%d)"
+          npm run build
 
       # Download the latest PMTiles release and include it in the Pages deploy
       - name: Download latest PMTiles

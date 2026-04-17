@@ -45,8 +45,8 @@
         <section class="block">
           <h2>Map style</h2>
           <select id="style-select">
+            <option value="https://tiles.openfreemap.org/styles/liberty" selected>Detailed (Liberty)</option>
             <option value="https://tiles.openfreemap.org/styles/positron">Light (Positron)</option>
-            <option value="https://tiles.openfreemap.org/styles/liberty">Detailed (Liberty)</option>
             <option value="https://tiles.openfreemap.org/styles/bright">Bright</option>
           </select>
         </section>
@@ -66,12 +66,33 @@
         </section>
 
         <footer>
-          Data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> (ODbL).
-          Basemap <a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a>.<br>
-          Built by <a href="https://github.com/misht-world" target="_blank" rel="noopener">misht-world</a> ·
-          <a href="https://github.com/misht-world/my_map-toll" target="_blank" rel="noopener">source</a> ·
-          <a href="https://github.com/misht-world/my_map-toll/issues/new" target="_blank" rel="noopener">feedback</a> ·
-          <a href="mailto:misht.world@gmail.com">contact</a>
+          <details class="disclaimer">
+            <summary>About &amp; disclaimer</summary>
+            <p>
+              <strong>Not for navigation.</strong> This map is an informational
+              overlay built from volunteer-contributed OpenStreetMap data.
+              Coverage is incomplete and may be out of date — especially for
+              snow-chain rules, seasonal restrictions, and newly built roads.
+              Always verify with local signage and official sources.
+            </p>
+            <p>
+              <strong>Data updates:</strong> the OSM snapshot is rebuilt
+              manually — currently about once a month. The date below is the
+              snapshot this page is using.
+            </p>
+            <p class="version">
+              Data: <span id="v-data">—</span> ·
+              Site built: <span id="v-build">—</span>
+            </p>
+          </details>
+          <p class="credits">
+            Data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> (ODbL).
+            Basemap <a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a>.<br>
+            Built by <a href="https://github.com/misht-world" target="_blank" rel="noopener">misht-world</a> ·
+            <a href="https://github.com/misht-world/my_map-toll" target="_blank" rel="noopener">source</a> ·
+            <a href="https://github.com/misht-world/my_map-toll/issues/new" target="_blank" rel="noopener">feedback</a> ·
+            <a href="mailto:misht.world@gmail.com">contact</a>
+          </p>
         </footer>
       </div><!-- /panel-body -->
     </aside>

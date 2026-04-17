@@ -194,6 +194,19 @@ html, body {
   color: var(--muted);
 }
 #panel footer a { color: var(--accent); }
+#panel footer .credits { margin: 6px 0 0; }
+.disclaimer summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text);
+  padding: 2px 0;
+  font-size: 11px;
+}
+.disclaimer p { margin: 6px 0; }
+.disclaimer .version {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+}
 
 /* ── Popup ──────────────────────────────────────────────────── */
 

@@ -105,10 +105,16 @@ try {
     counters.toll[toll.status]++;
     counters.chains[chains.status]++;
 
-    // Ferry: any route=ferry. Ferries live in their own layer and we
-    // deliberately ignore any toll tags on them (toll on a ferry is
-    // not meaningful for a road-restrictions map for cars).
-    const ferryOk = tags["route"] === "ferry";
+    // Ferry: route=ferry, but exclude ferries where cars clearly aren't
+    // allowed (e.g. bike/foot-only ferries tagged vehicle=no, motor_vehicle=no,
+    // motorcar=no, or access=no). Other route=ferry ways are assumed to
+    // carry cars — it's by far the common case in OSM.
+    const isFerryRoute = tags["route"] === "ferry";
+    const carsBlocked  = tags["access"] === "no"
+                      || tags["vehicle"] === "no"
+                      || tags["motor_vehicle"] === "no"
+                      || tags["motorcar"] === "no";
+    const ferryOk = isFerryRoute && !carsBlocked;
 
     const tollIncluded   = !ferryOk && toll.status !== "unknown";
     const chainsIncluded = chains.status !== "unknown";

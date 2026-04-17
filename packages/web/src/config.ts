@@ -16,9 +16,14 @@ export const config = {
     env.VITE_PMTILES_URL ??
     "https://github.com/misht-world/my_map-toll/releases/latest/download/europe-overlay.pmtiles",
 
-  /** Basemap style JSON — OpenFreeMap, free, keyless, global vector tiles. */
+  /** Basemap style JSON — OpenFreeMap, free, keyless, global vector tiles.
+   *  Default: Liberty (detailed). Users can switch in the panel. */
   basemapStyleUrl:
-    env.VITE_BASEMAP_STYLE ?? "https://tiles.openfreemap.org/styles/positron",
+    env.VITE_BASEMAP_STYLE ?? "https://tiles.openfreemap.org/styles/liberty",
+
+  /** Data snapshot date (release tag) and site build date, injected at build. */
+  dataDate:  env.VITE_DATA_DATE  ?? "",
+  buildDate: env.VITE_BUILD_DATE ?? "",
 
   /** Overpass API for lazy-fetching raw tags by osm_id on popup click. */
   overpassUrl:

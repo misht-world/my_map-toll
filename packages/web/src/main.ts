@@ -50,7 +50,8 @@ const map = new MLMap({
   attributionControl: { compact: true },
 });
 
-map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+// showCompass:true renders the rotation indicator — click it to reset north.
+map.addControl(new maplibregl.NavigationControl({ showCompass: true, visualizePitch: true }), "top-right");
 map.addControl(new maplibregl.GeolocateControl({
   positionOptions: { enableHighAccuracy: true },
   trackUserLocation: true,
@@ -103,9 +104,11 @@ if ([...styleSelect.options].some(o => o.value === savedStyle)) {
 }
 styleSelect.addEventListener("change", () => {
   try { localStorage.setItem(STYLE_KEY, styleSelect.value); } catch { /* ignore */ }
-  // setStyle triggers a `style.load` event — our `addOverlay` handler
-  // re-adds the source and layers automatically.
-  map.setStyle(styleSelect.value);
+  // diff:false forces a clean style reload so `style.load` fires and our
+  // `addOverlay` handler re-adds the source + layers. With the default
+  // diff:true MapLibre tries to preserve user state by diffing the style
+  // JSONs, and our custom pmtiles source gets dropped without a style.load.
+  map.setStyle(styleSelect.value, { diff: false });
 });
 
 // ---------------------------------------------------------------------------
@@ -213,6 +216,14 @@ shareBtn.addEventListener("click", async () => {
     window.setTimeout(() => (shareBtn.textContent = "Copy shareable link"), 1500);
   } catch { shareBtn.textContent = "Copy failed"; }
 });
+
+// ---------------------------------------------------------------------------
+// Version labels (data snapshot + site build date, injected at build time)
+// ---------------------------------------------------------------------------
+const vData  = document.getElementById("v-data");
+const vBuild = document.getElementById("v-build");
+if (vData)  vData.textContent  = config.dataDate  || "unknown";
+if (vBuild) vBuild.textContent = config.buildDate || "dev";
 
 // ---------------------------------------------------------------------------
 // Mobile panel toggle
