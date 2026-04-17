@@ -27,10 +27,10 @@ describe("interpretToll", () => {
     expect(r.reason_code).toBe(TollReason.MOTOR_VEHICLE_YES);
   });
 
-  it("returns ambiguous when only HGV toll is tagged", () => {
+  it("returns unknown when only HGV toll is tagged (not relevant for car map)", () => {
     const r = interpretToll({ "toll:hgv": "yes" });
-    expect(r.status).toBe("ambiguous");
-    expect(r.reason_code).toBe(TollReason.HGV_ONLY_AMBIGUOUS);
+    expect(r.status).toBe("unknown");
+    expect(r.reason_code).toBeNull();
   });
 
   it("returns unknown when no toll tags are present", () => {

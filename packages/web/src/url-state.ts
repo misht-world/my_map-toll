@@ -13,7 +13,7 @@ export interface UrlState {
   zoom: number;
   lat: number;
   lon: number;
-  layers: { toll: boolean; chains: boolean };
+  layers: { toll: boolean; chains: boolean; ferry: boolean };
 }
 
 export function parseHash(hash: string, fallback: UrlState): UrlState {
@@ -39,7 +39,7 @@ export function parseHash(hash: string, fallback: UrlState): UrlState {
   const layers = params.get("layers");
   if (layers !== null) {
     const set = new Set(layers.split(",").map((s) => s.trim()).filter(Boolean));
-    out.layers = { toll: set.has("toll"), chains: set.has("chains") };
+    out.layers = { toll: set.has("toll"), chains: set.has("chains"), ferry: set.has("ferry") };
   }
 
   return out;
@@ -48,8 +48,9 @@ export function parseHash(hash: string, fallback: UrlState): UrlState {
 export function formatHash(state: UrlState): string {
   const mapParam = `${state.zoom.toFixed(2)}/${state.lat.toFixed(5)}/${state.lon.toFixed(5)}`;
   const activeLayers = [
-    state.layers.toll ? "toll" : null,
+    state.layers.toll   ? "toll"   : null,
     state.layers.chains ? "chains" : null,
+    state.layers.ferry  ? "ferry"  : null,
   ].filter(Boolean);
   const params = new URLSearchParams();
   params.set("map", mapParam);

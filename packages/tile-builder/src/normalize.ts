@@ -100,16 +100,20 @@ try {
       stderr.write(`[normalize] first feature keys: ${JSON.stringify(Object.keys(rawProps))}\n`);
     }
 
-    const toll = interpretToll(tags, parseWhen);
+    const toll   = interpretToll(tags, parseWhen);
     const chains = interpretChains(tags, parseWhen);
     counters.toll[toll.status]++;
     counters.chains[chains.status]++;
 
-    const tollIncluded = toll.status !== "unknown";
-    const chainsIncluded = chains.status !== "unknown";
-    if (!tollIncluded && !chainsIncluded) continue;
+    // Car ferry: route=ferry + explicit motor_vehicle=yes or motorcar=yes
+    const ferryOk = tags["route"] === "ferry" &&
+      (tags["motor_vehicle"] === "yes" || tags["motorcar"] === "yes");
 
-    const outProps: TileProperties = {
+    const tollIncluded   = toll.status !== "unknown";
+    const chainsIncluded = chains.status !== "unknown";
+    if (!tollIncluded && !chainsIncluded && !ferryOk) continue;
+
+    const outProps: TileProperties & { ferry_car?: boolean } = {
       osm_type: osmType,
       osm_id: osmId,
       ...(tollIncluded && {
@@ -120,6 +124,7 @@ try {
         chains_status: chains.status,
         chains_reason: chains.reason_code ?? "",
       }),
+      ...(ferryOk && { ferry_car: true }),
     };
 
     stdout.write(

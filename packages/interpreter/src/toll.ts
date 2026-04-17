@@ -84,9 +84,9 @@ export function interpretToll(
     return { status: "explicit_yes", reason_code: TollReason.MOTOR_VEHICLE_YES };
   }
 
-  // Only HGV is tolled and no info about cars → ambiguous (do not claim "no").
-  if (tags["toll:hgv"] === "yes" && motorcar === undefined && generic === undefined) {
-    return { status: "ambiguous", reason_code: TollReason.HGV_ONLY_AMBIGUOUS };
+  // Only HGV is tolled and no info about cars → not relevant for a car map.
+  if (tags["toll:hgv"] === "yes" && motorcar === undefined && generic === undefined && motorVehicle === undefined) {
+    return { status: "unknown", reason_code: null };
   }
 
   // No relevant tags — segment is not part of the toll layer.

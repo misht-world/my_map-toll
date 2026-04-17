@@ -11,6 +11,7 @@
   --chains-yes: #1565c0;
   --chains-cond: #0288d1;
   --chains-amb: #90a4ae;
+  --ferry: #00838f;
 }
 
 * { box-sizing: border-box; }
@@ -120,6 +121,7 @@ html, body {
 .sw-chains-yes  { background: var(--chains-yes); }
 .sw-chains-cond { background: var(--chains-cond); }
 .sw-chains-amb  { background: var(--chains-amb); border: 1px dashed #555; }
+.sw-ferry       { background: var(--ferry); border: 2px dashed var(--ferry); }
 
 .hint {
   font-size: 11px;
@@ -164,6 +166,24 @@ html, body {
   font-size: 11px;
   color: var(--muted);
   word-break: break-all;
+}
+
+#style-select {
+  width: 100%;
+  padding: 5px 6px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font: inherit;
+  font-size: 12px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.popup-links {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 6px;
 }
 
 #panel footer {
@@ -230,9 +250,9 @@ html, body {
     display: none;
   }
 
-  /* MapLibre controls — move right to not overlap panel */
+  /* Push MapLibre controls below the panel header (~52px) */
   .maplibregl-ctrl-top-right {
-    top: 8px;
+    top: 60px;
     right: 8px;
   }
 
