@@ -115,16 +115,21 @@ try {
     counters.toll[toll.status]++;
     counters.chains[chains.status]++;
 
-    // Ferry: route=ferry, but exclude ferries where cars clearly aren't
-    // allowed (e.g. bike/foot-only ferries tagged vehicle=no, motor_vehicle=no,
-    // motorcar=no, or access=no). Other route=ferry ways are assumed to
-    // carry cars — it's by far the common case in OSM.
+    // Ferry: require *positive confirmation* that the ferry carries cars.
+    // route=ferry alone is not enough — many ferries are foot/bike-only
+    // and OSM mappers don't always tag the negative case. We accept any
+    // of: motor_vehicle=yes, motorcar=yes, motor_vehicle=designated,
+    // motorcar=designated, or vehicle=yes (umbrella).
     const isFerryRoute = tags["route"] === "ferry";
+    const allowsCars =
+         tags["motor_vehicle"] === "yes" || tags["motor_vehicle"] === "designated"
+      || tags["motorcar"]      === "yes" || tags["motorcar"]      === "designated"
+      || tags["vehicle"]       === "yes" || tags["vehicle"]       === "designated";
     const carsBlocked  = tags["access"] === "no"
                       || tags["vehicle"] === "no"
                       || tags["motor_vehicle"] === "no"
                       || tags["motorcar"] === "no";
-    const ferryOk = isFerryRoute && !carsBlocked;
+    const ferryOk = isFerryRoute && allowsCars && !carsBlocked;
 
     const tollIncluded   = !ferryOk && toll.status !== "unknown";
     const chainsIncluded = chains.status !== "unknown";
