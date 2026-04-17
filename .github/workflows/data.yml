@@ -35,7 +35,10 @@ jobs:
           dotnet: true
           haskell: true
           large-packages: true
-          swap-storage: true
+          # Keep swap — osmium can spike memory on large PBFs and the
+          # 4 GB swap file prevents OOM kills (manifests as "lost
+          # communication with the server" in GH Actions).
+          swap-storage: false
 
       - name: Install system tools (osmium, tippecanoe)
         run: |
