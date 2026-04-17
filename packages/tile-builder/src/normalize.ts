@@ -105,11 +105,12 @@ try {
     counters.toll[toll.status]++;
     counters.chains[chains.status]++;
 
-    // Car ferry: route=ferry + explicit motor_vehicle=yes or motorcar=yes
-    const ferryOk = tags["route"] === "ferry" &&
-      (tags["motor_vehicle"] === "yes" || tags["motorcar"] === "yes");
+    // Ferry: any route=ferry. Ferries live in their own layer and we
+    // deliberately ignore any toll tags on them (toll on a ferry is
+    // not meaningful for a road-restrictions map for cars).
+    const ferryOk = tags["route"] === "ferry";
 
-    const tollIncluded   = toll.status !== "unknown";
+    const tollIncluded   = !ferryOk && toll.status !== "unknown";
     const chainsIncluded = chains.status !== "unknown";
     if (!tollIncluded && !chainsIncluded && !ferryOk) continue;
 

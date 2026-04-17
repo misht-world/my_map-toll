@@ -16,7 +16,12 @@ export const overlayLayers: LayerSpecification[] = [
 
   {
     ...base, id: "toll-hitbox",
-    filter: ["==", ["get", "toll_status"], "explicit_yes"],
+    // Exclude ferries — they live only in the ferry layer. The `!=` on a
+    // missing prop is `true` in MapLibre filter semantics, so non-ferries pass.
+    filter: ["all",
+      ["==", ["get", "toll_status"], "explicit_yes"],
+      ["!=", ["get", "ferry_car"], true],
+    ],
     paint: { "line-color": "transparent", "line-width": 20, "line-opacity": 0 },
   },
   {
@@ -34,7 +39,12 @@ export const overlayLayers: LayerSpecification[] = [
 
   {
     ...base, id: "toll-explicit",
-    filter: ["==", ["get", "toll_status"], "explicit_yes"],
+    // Exclude ferries — they live only in the ferry layer. The `!=` on a
+    // missing prop is `true` in MapLibre filter semantics, so non-ferries pass.
+    filter: ["all",
+      ["==", ["get", "toll_status"], "explicit_yes"],
+      ["!=", ["get", "ferry_car"], true],
+    ],
     paint: {
       "line-color": "#c62828",
       "line-width": ["interpolate", ["linear"], ["zoom"], 5, 2.5, 12, 5],

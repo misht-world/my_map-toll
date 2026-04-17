@@ -25,6 +25,13 @@ const defaultState: UrlState = {
 };
 const initial = parseHash(window.location.hash, defaultState);
 
+// Persisted basemap style (survives F5). Falls back to config default.
+const STYLE_KEY = "mmt:basemapStyle";
+const savedStyle = (() => {
+  try { return localStorage.getItem(STYLE_KEY) || config.basemapStyleUrl; }
+  catch { return config.basemapStyleUrl; }
+})();
+
 const tollToggle   = document.getElementById("toggle-toll")   as HTMLInputElement;
 const chainsToggle = document.getElementById("toggle-chains") as HTMLInputElement;
 const ferryToggle  = document.getElementById("toggle-ferry")  as HTMLInputElement;
@@ -37,7 +44,7 @@ ferryToggle.checked  = (initial.layers as Record<string, boolean>)["ferry"] ?? t
 // ---------------------------------------------------------------------------
 const map = new MLMap({
   container: "map",
-  style: config.basemapStyleUrl,
+  style: savedStyle,
   center: [initial.lon, initial.lat],
   zoom: initial.zoom,
   attributionControl: { compact: true },
@@ -50,15 +57,24 @@ map.addControl(new maplibregl.GeolocateControl({
 }), "top-right");
 map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-right");
 
-map.on("load", () => {
-  map.addSource("restrictions", {
-    type: "vector",
-    url: "pmtiles://" + config.pmtilesUrl,
-    attribution: "© OpenStreetMap contributors (ODbL)",
-  });
-  for (const layer of overlayLayers) map.addLayer(layer);
+// Add our overlay on top of whichever basemap style is active.
+// Using `style.load` (not `load`) means this fires for both the initial
+// load AND every subsequent `map.setStyle()` call, because setStyle
+// strips custom sources/layers that aren't part of the new style.
+function addOverlay() {
+  if (!map.getSource("restrictions")) {
+    map.addSource("restrictions", {
+      type: "vector",
+      url: "pmtiles://" + config.pmtilesUrl,
+      attribution: "© OpenStreetMap contributors (ODbL)",
+    });
+  }
+  for (const layer of overlayLayers) {
+    if (!map.getLayer(layer.id)) map.addLayer(layer);
+  }
   applyLayerVisibility();
-});
+}
+map.on("style.load", addOverlay);
 
 // ---------------------------------------------------------------------------
 // Layer toggles
@@ -81,18 +97,15 @@ ferryToggle.addEventListener("change",  applyLayerVisibility);
 // Basemap style switcher
 // ---------------------------------------------------------------------------
 const styleSelect = document.getElementById("style-select") as HTMLSelectElement;
+// Restore saved selection if it's one of the options
+if ([...styleSelect.options].some(o => o.value === savedStyle)) {
+  styleSelect.value = savedStyle;
+}
 styleSelect.addEventListener("change", () => {
+  try { localStorage.setItem(STYLE_KEY, styleSelect.value); } catch { /* ignore */ }
+  // setStyle triggers a `style.load` event — our `addOverlay` handler
+  // re-adds the source and layers automatically.
   map.setStyle(styleSelect.value);
-  // Re-add our overlay after style reload
-  map.once("style.load", () => {
-    map.addSource("restrictions", {
-      type: "vector",
-      url: "pmtiles://" + config.pmtilesUrl,
-      attribution: "© OpenStreetMap contributors (ODbL)",
-    });
-    for (const layer of overlayLayers) map.addLayer(layer);
-    applyLayerVisibility();
-  });
 });
 
 // ---------------------------------------------------------------------------
