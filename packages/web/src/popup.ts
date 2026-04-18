@@ -15,6 +15,13 @@ export function renderPopup(props: TileProperties, lngLat: LngLat): HTMLElement 
   root.className = "popup";
   const lines: string[] = [];
 
+  if (props.kind === "lez") {
+    const name = (props.name && props.name.length > 0) ? props.name : "Low emission zone";
+    lines.push(
+      `<div class="popup-status">🌿 ${escapeHtml(name)}</div>`,
+      `<div class="popup-reason">Low emission / restricted-access zone. Check local rules — vehicle class limits, hours, permits may apply.</div>`,
+    );
+  }
   if (props.toll_status && props.toll_status !== "unknown") {
     lines.push(
       `<div class="popup-status">💰 Toll: ${escapeHtml(STATUS_LABELS[props.toll_status] ?? props.toll_status)}</div>`,

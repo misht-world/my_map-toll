@@ -32,6 +32,8 @@ osmium tags-filter --overwrite -o "$OUT" "$IN" \
   w/snow_chains \
   w/snow_chains:conditional \
   w/winter_road \
-  r/route=ferry
+  r/route=ferry \
+  r/boundary=low_emission_zone \
+  w/boundary=low_emission_zone
 
 echo "[filter] done: $(du -h "$OUT" | cut -f1)"

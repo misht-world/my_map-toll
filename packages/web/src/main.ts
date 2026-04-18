@@ -3,7 +3,7 @@ import { Protocol } from "pmtiles";
 import type { TileProperties } from "@mmt/model";
 
 import { config } from "./config.js";
-import { overlayLayers, TOLL_LAYER_IDS, CHAINS_LAYER_IDS, FERRY_LAYER_IDS } from "./layers.js";
+import { overlayLayers, TOLL_LAYER_IDS, CHAINS_LAYER_IDS, FERRY_LAYER_IDS, LEZ_LAYER_IDS } from "./layers.js";
 import { parseCoords } from "./search.js";
 import { parseHash, formatHash, type UrlState } from "./url-state.js";
 import { renderPopup } from "./popup.js";
@@ -21,7 +21,7 @@ const defaultState: UrlState = {
   zoom: config.defaultView.zoom,
   lat: config.defaultView.center[1],
   lon: config.defaultView.center[0],
-  layers: { toll: true, chains: true, ferry: true },
+  layers: { toll: true, chains: true, ferry: true, lez: true },
 };
 const initial = parseHash(window.location.hash, defaultState);
 
@@ -35,9 +35,11 @@ const savedStyle = (() => {
 const tollToggle   = document.getElementById("toggle-toll")   as HTMLInputElement;
 const chainsToggle = document.getElementById("toggle-chains") as HTMLInputElement;
 const ferryToggle  = document.getElementById("toggle-ferry")  as HTMLInputElement;
+const lezToggle    = document.getElementById("toggle-lez")    as HTMLInputElement;
 tollToggle.checked   = initial.layers.toll;
 chainsToggle.checked = initial.layers.chains;
 ferryToggle.checked  = (initial.layers as Record<string, boolean>)["ferry"] ?? true;
+lezToggle.checked    = (initial.layers as Record<string, boolean>)["lez"]   ?? true;
 
 // ---------------------------------------------------------------------------
 // Map
@@ -58,11 +60,36 @@ map.addControl(new maplibregl.GeolocateControl({
 }), "top-right");
 map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-right");
 
+// Generate a sparse diagonal hatch pattern as an ImageData and register it
+// with MapLibre under the name "lez-hatch". Used by the LEZ fill layer.
+// Sparse on purpose — transparent gaps let basemap roads show through, so
+// the zone is visible without obscuring the map underneath.
+function makeHatchImage(): ImageData {
+  const size = 16;
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const ctx = c.getContext("2d")!;
+  ctx.clearRect(0, 0, size, size);
+  ctx.strokeStyle = "rgba(46, 125, 50, 0.55)"; // dark green, semi-transparent
+  ctx.lineWidth = 2;
+  ctx.lineCap = "square";
+  ctx.beginPath();
+  // Three diagonals to make the pattern wrap seamlessly across tile edges.
+  ctx.moveTo(-2, size + 2); ctx.lineTo(size + 2, -2);
+  ctx.moveTo(-2, size / 2 + 2); ctx.lineTo(size / 2 + 2, -2);
+  ctx.moveTo(size / 2 - 2, size + 2); ctx.lineTo(size + 2, size / 2 - 2);
+  ctx.stroke();
+  return ctx.getImageData(0, 0, size, size);
+}
+
 // Add our overlay on top of whichever basemap style is active.
 // Using `style.load` (not `load`) means this fires for both the initial
 // load AND every subsequent `map.setStyle()` call, because setStyle
 // strips custom sources/layers that aren't part of the new style.
 function addOverlay() {
+  if (!map.hasImage("lez-hatch")) {
+    map.addImage("lez-hatch", makeHatchImage(), { pixelRatio: 2 });
+  }
   if (!map.getSource("restrictions")) {
     map.addSource("restrictions", {
       type: "vector",
@@ -88,11 +115,13 @@ function applyLayerVisibility() {
   set(TOLL_LAYER_IDS,   tollToggle.checked);
   set(CHAINS_LAYER_IDS, chainsToggle.checked);
   set(FERRY_LAYER_IDS,  ferryToggle.checked);
+  set(LEZ_LAYER_IDS,    lezToggle.checked);
   syncHash();
 }
 tollToggle.addEventListener("change",   applyLayerVisibility);
 chainsToggle.addEventListener("change", applyLayerVisibility);
 ferryToggle.addEventListener("change",  applyLayerVisibility);
+lezToggle.addEventListener("change",    applyLayerVisibility);
 
 // ---------------------------------------------------------------------------
 // Basemap style switcher
@@ -114,17 +143,21 @@ styleSelect.addEventListener("change", () => {
 // ---------------------------------------------------------------------------
 // Click → popup  (pass click lngLat for Google Maps link)
 // ---------------------------------------------------------------------------
-const interactiveLayers = [...TOLL_LAYER_IDS, ...CHAINS_LAYER_IDS, ...FERRY_LAYER_IDS]
+const interactiveLayers = [...TOLL_LAYER_IDS, ...CHAINS_LAYER_IDS, ...FERRY_LAYER_IDS, ...LEZ_LAYER_IDS]
   .filter(id => !id.endsWith("-hitbox"));
 
 // Hitbox layers are for hit-testing, visible layers for display.
-// We listen on all layers (hitbox catches wide area, display layers also work).
-const allClickLayers = [...TOLL_LAYER_IDS, ...CHAINS_LAYER_IDS, ...FERRY_LAYER_IDS];
+// LEZ fill itself is a generous hit-area (whole polygon).
+const allClickLayers = [...TOLL_LAYER_IDS, ...CHAINS_LAYER_IDS, ...FERRY_LAYER_IDS, ...LEZ_LAYER_IDS];
 
 map.on("click", (e) => {
   const features = map.queryRenderedFeatures(e.point, { layers: allClickLayers });
   if (features.length === 0) return;
-  const props = features[0]!.properties as unknown as TileProperties;
+  // Prefer line features (toll/chains/ferry) over the LEZ polygon when both
+  // are under the cursor — clicking a road inside a zone should show the
+  // road's info, not the zone.
+  const preferred = features.find(f => (f.properties as { kind?: string }).kind !== "lez") ?? features[0]!;
+  const props = preferred.properties as unknown as TileProperties;
 
   new Popup({ maxWidth: "300px" })
     .setLngLat(e.lngLat)
@@ -181,7 +214,7 @@ function syncHash() {
     const c = map.getCenter();
     const next = formatHash({
       zoom: map.getZoom(), lat: c.lat, lon: c.lng,
-      layers: { toll: tollToggle.checked, chains: chainsToggle.checked, ferry: ferryToggle.checked },
+      layers: { toll: tollToggle.checked, chains: chainsToggle.checked, ferry: ferryToggle.checked, lez: lezToggle.checked },
     });
     if (next !== window.location.hash) history.replaceState(null, "", next);
   }, 200);
@@ -195,6 +228,7 @@ window.addEventListener("hashchange", () => {
   tollToggle.checked   = s.layers.toll;
   chainsToggle.checked = s.layers.chains;
   ferryToggle.checked  = (s.layers as Record<string, boolean>)["ferry"] ?? true;
+  lezToggle.checked    = (s.layers as Record<string, boolean>)["lez"]   ?? true;
   applyLayerVisibility();
 });
 

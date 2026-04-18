@@ -106,12 +106,28 @@ try {
       stderr.write(`[normalize] first feature keys: ${JSON.stringify(Object.keys(rawProps))}\n`);
     }
 
-    // Hard gate: must be either a road (highway=*) or a ferry (route=ferry).
-    // Without this, things like aerialway=zip_line + toll=yes would slip
-    // through purely on the toll tag.
+    // Hard gate: must be a road (highway=*), a ferry (route=ferry),
+    // or a low-emission zone polygon (boundary=low_emission_zone).
     const isHighway = typeof tags["highway"] === "string" && tags["highway"] !== "";
     const isFerry   = tags["route"] === "ferry";
-    if (!isHighway && !isFerry) continue;
+    const isLEZ     = tags["boundary"] === "low_emission_zone";
+    if (!isHighway && !isFerry && !isLEZ) continue;
+
+    // LEZ: emit as a polygon feature with a discriminator and bail out
+    // before any toll/chains/ferry interpretation runs.
+    if (isLEZ) {
+      const lezProps: TileProperties = {
+        osm_type: osmType,
+        osm_id: osmId,
+        kind: "lez",
+        name: tags["name"] ?? "",
+      };
+      stdout.write(
+        JSON.stringify({ type: "Feature", geometry: feat.geometry, properties: lezProps }) + "\n",
+      );
+      counters.emitted++;
+      continue;
+    }
 
     // Drop non-car highway classes outright (defined above the loop).
     if (isHighway && NON_CAR_HIGHWAYS.has(tags["highway"]!)) continue;

@@ -7,10 +7,42 @@ const SOURCE_LAYER = "restrictions";
 export const TOLL_LAYER_IDS   = ["toll-hitbox",   "toll-explicit"]              as const;
 export const CHAINS_LAYER_IDS = ["chains-hitbox",  "chains-explicit", "chains-conditional", "chains-ambiguous"] as const;
 export const FERRY_LAYER_IDS  = ["ferry-hitbox",   "ferry-car"]                 as const;
+export const LEZ_LAYER_IDS    = ["lez-fill",       "lez-outline"]               as const;
 
 const base = { type: "line" as const, source: SOURCE, "source-layer": SOURCE_LAYER, minzoom: 3 };
 
 export const overlayLayers: LayerSpecification[] = [
+
+  // ── Low Emission Zones (drawn FIRST so road overlays render on top) ──────
+  // The fill uses a sparse diagonal hatch image registered at runtime
+  // (see registerHatchImage in main.ts). Its transparent gaps let basemap
+  // roads show through, and our toll/chains/ferry lines sit above it.
+
+  {
+    id: "lez-fill",
+    type: "fill",
+    source: SOURCE,
+    "source-layer": SOURCE_LAYER,
+    minzoom: 5,
+    filter: ["==", ["get", "kind"], "lez"],
+    paint: {
+      "fill-pattern": "lez-hatch",
+      "fill-opacity": 0.85,
+    },
+  },
+  {
+    id: "lez-outline",
+    type: "line",
+    source: SOURCE,
+    "source-layer": SOURCE_LAYER,
+    minzoom: 5,
+    filter: ["==", ["get", "kind"], "lez"],
+    paint: {
+      "line-color": "#2e7d32",
+      "line-width": ["interpolate", ["linear"], ["zoom"], 5, 1, 12, 2],
+      "line-opacity": 0.9,
+    },
+  },
 
   // ── Invisible wide hit-areas for easy clicking (esp. on mobile) ──────────
 

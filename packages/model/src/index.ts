@@ -105,6 +105,12 @@ export interface TileProperties {
   toll_reason?: string;
   chains_status?: ChainsStatus;
   chains_reason?: string;
+  /** Discriminator for non-line features (currently: "lez"). */
+  kind?: "lez";
+  /** OSM `name=*` tag, used by zone features (LEZ) for popup labels. */
+  name?: string;
+  /** True for car-capable ferries. */
+  ferry_car?: boolean;
 }
 
 export type OsmTags = Readonly<Record<string, string>>;
