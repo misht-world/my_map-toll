@@ -137,7 +137,11 @@ try {
                       || tags["motorcar"] === "no";
     const ferryOk = isFerryRoute && allowsCars && !carsBlocked;
 
-    const tollIncluded   = !ferryOk && toll.status !== "unknown";
+    // Ferries never belong in the toll layer, even if they don't pass the
+    // strict ferry-qualification check (no motor_vehicle=yes etc.). A
+    // route=ferry tagged toll=yes without car-access info is just an
+    // unqualified ferry — drop it from toll, not promote it to a road.
+    const tollIncluded   = !isFerryRoute && toll.status !== "unknown";
     const chainsIncluded = chains.status !== "unknown";
     if (!tollIncluded && !chainsIncluded && !ferryOk) continue;
 
