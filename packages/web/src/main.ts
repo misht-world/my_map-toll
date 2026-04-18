@@ -230,6 +230,15 @@ if (vBuild) vBuild.textContent = config.buildDate || "dev";
 // ---------------------------------------------------------------------------
 const panel       = document.getElementById("panel")        as HTMLElement;
 const panelToggle = document.getElementById("panel-toggle") as HTMLButtonElement;
+
+// On mobile (matches the CSS @media breakpoint) start with the panel
+// collapsed so it doesn't cover half the map. Desktop is unaffected.
+const mobileMQ = window.matchMedia("(max-width: 600px)");
+if (mobileMQ.matches) {
+  panel.classList.add("collapsed");
+  panelToggle.textContent = "☰";
+}
+
 panelToggle.addEventListener("click", () => {
   panel.classList.toggle("collapsed");
   panelToggle.textContent = panel.classList.contains("collapsed") ? "☰" : "✕";
