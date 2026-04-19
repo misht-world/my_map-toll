@@ -61,9 +61,33 @@ function extractMonths(s: string): string[] {
   return ALL_MONTHS.filter((m) => found.has(m));
 }
 
+/**
+ * The map is car-only. A seasonal closure on `motor_vehicle:conditional`
+ * or `access:conditional` may be overridden by a more specific positive
+ * tag for cars — in that case the road is NOT closed to cars and we
+ * should not show it on the seasonal layer.
+ *
+ * Examples we filter out:
+ *   - motor_vehicle:conditional = "no @ (Nov-Apr)" + motorcar = yes
+ *     → road closed to trucks/bikes in winter, cars still pass.
+ *   - access:conditional = "no @ (Dec-Mar)" + motorcar:conditional =
+ *     "yes @ (Dec-Mar)" → cars exempted from the seasonal closure.
+ */
+function carsExempt(tags: OsmTags, matchedKey: string): boolean {
+  if (tags["motorcar"] === "yes" || tags["motorcar"] === "designated") return true;
+  if (matchedKey !== "motorcar:conditional") {
+    const mc = tags["motorcar:conditional"];
+    if (mc && /\byes\s*@\s*\(/i.test(mc)) return true;
+  }
+  return false;
+}
+
 export function interpretSeasonal(tags: OsmTags): SeasonalResult {
-  // Winter-only roads (e.g. ice crossings).
+  // Winter-only roads (e.g. ice crossings). Skip if cars are explicitly
+  // disallowed — a pedestrian-only winter track isn't useful on a car map.
   if (tags["seasonal"] === "winter") {
+    const carsBlocked = tags["motorcar"] === "no" || tags["motor_vehicle"] === "no";
+    if (carsBlocked) return { status: "unknown", reason_code: null };
     return {
       status: "winter_only_road",
       reason_code: SeasonalReason.SEASONAL_WINTER,
@@ -83,14 +107,17 @@ export function interpretSeasonal(tags: OsmTags): SeasonalResult {
 
     // Require at least two winter months — guards against false positives
     // like a single-day November closure for an event.
-    if (winter.length >= 2) {
-      return {
-        status: "winter_closure",
-        reason_code: SeasonalReason.CONDITIONAL_WINTER_NO,
-        months,
-        raw: v,
-      };
-    }
+    if (winter.length < 2) continue;
+
+    // Only show closures that actually affect cars.
+    if (carsExempt(tags, key)) continue;
+
+    return {
+      status: "winter_closure",
+      reason_code: SeasonalReason.CONDITIONAL_WINTER_NO,
+      months,
+      raw: v,
+    };
   }
 
   return { status: "unknown", reason_code: null };

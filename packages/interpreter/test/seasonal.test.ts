@@ -55,6 +55,30 @@ describe("interpretSeasonal", () => {
     expect(r.reason_code).toBeNull();
   });
 
+  it("ignores closure when cars are explicitly allowed (motorcar=yes override)", () => {
+    const r = interpretSeasonal({
+      "motor_vehicle:conditional": "no @ (Nov-Apr)",
+      motorcar: "yes",
+    });
+    expect(r.status).toBe("unknown");
+  });
+
+  it("ignores closure when motorcar:conditional yes-overrides the same period", () => {
+    const r = interpretSeasonal({
+      "access:conditional": "no @ (Dec-Mar)",
+      "motorcar:conditional": "yes @ (Dec-Mar)",
+    });
+    expect(r.status).toBe("unknown");
+  });
+
+  it("ignores winter-only road if cars are explicitly disallowed", () => {
+    const r = interpretSeasonal({
+      seasonal: "winter",
+      motor_vehicle: "no",
+    });
+    expect(r.status).toBe("unknown");
+  });
+
   it("handles motorcar:conditional", () => {
     const r = interpretSeasonal({
       "motorcar:conditional": "no @ (Oct 15-May 15)",
