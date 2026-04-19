@@ -25,6 +25,12 @@ export type ChainsStatus =
   | "ambiguous"
   | "unknown";
 
+/** Seasonal road closures (mainly mountain passes and ice/winter roads). */
+export type SeasonalStatus =
+  | "winter_closure"   // road is closed during winter months
+  | "winter_only_road" // road exists/is passable only in winter (ice roads)
+  | "unknown";
+
 // ---------------------------------------------------------------------------
 // Reason codes
 //
@@ -52,6 +58,12 @@ export const ChainsReason = {
   WINTER_ROAD_AMBIGUOUS: "winter_road=yes+no_chains_info",
 } as const;
 export type ChainsReasonCode = (typeof ChainsReason)[keyof typeof ChainsReason];
+
+export const SeasonalReason = {
+  CONDITIONAL_WINTER_NO: "*:conditional=no @ winter",
+  SEASONAL_WINTER: "seasonal=winter",
+} as const;
+export type SeasonalReasonCode = (typeof SeasonalReason)[keyof typeof SeasonalReason];
 
 // ---------------------------------------------------------------------------
 // Conditions
@@ -86,6 +98,15 @@ export interface ChainsResult {
   conditions?: Condition[];
 }
 
+export interface SeasonalResult {
+  status: SeasonalStatus;
+  reason_code: SeasonalReasonCode | null;
+  /** Three-letter month abbreviations affected, if detected (e.g. ["Nov","Dec","Jan","Feb","Mar","Apr"]). */
+  months?: string[];
+  /** Original conditional/seasonal tag value, for auditing. */
+  raw?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Segment (logical; only a subset is actually embedded into vector tiles)
 // ---------------------------------------------------------------------------
@@ -105,6 +126,10 @@ export interface TileProperties {
   toll_reason?: string;
   chains_status?: ChainsStatus;
   chains_reason?: string;
+  seasonal_status?: SeasonalStatus;
+  seasonal_reason?: string;
+  /** Comma-separated month abbreviations of affected/closed period. */
+  seasonal_months?: string;
   /** Discriminator for non-line features (currently: "lez"). */
   kind?: "lez";
   /** OSM `name=*` tag, used by zone features (LEZ) for popup labels. */

@@ -13,7 +13,7 @@ export interface UrlState {
   zoom: number;
   lat: number;
   lon: number;
-  layers: { toll: boolean; chains: boolean; ferry: boolean; lez: boolean };
+  layers: { toll: boolean; chains: boolean; ferry: boolean; lez: boolean; seasonal: boolean };
 }
 
 export function parseHash(hash: string, fallback: UrlState): UrlState {
@@ -47,10 +47,11 @@ export function parseHash(hash: string, fallback: UrlState): UrlState {
     const get = (name: keyof UrlState["layers"], def: boolean) =>
       set.has(name) ? true : (authoritative ? false : def);
     out.layers = {
-      toll:   get("toll",   fallback.layers.toll),
-      chains: get("chains", fallback.layers.chains),
-      ferry:  get("ferry",  fallback.layers.ferry),
-      lez:    get("lez",    fallback.layers.lez),
+      toll:     get("toll",     fallback.layers.toll),
+      chains:   get("chains",   fallback.layers.chains),
+      ferry:    get("ferry",    fallback.layers.ferry),
+      lez:      get("lez",      fallback.layers.lez),
+      seasonal: get("seasonal", fallback.layers.seasonal),
     };
   }
 
@@ -64,6 +65,7 @@ export function formatHash(state: UrlState): string {
     state.layers.chains ? "chains" : null,
     state.layers.ferry  ? "ferry"  : null,
     state.layers.lez    ? "lez"    : null,
+    state.layers.seasonal ? "seasonal" : null,
   ].filter(Boolean);
   const params = new URLSearchParams();
   params.set("map", mapParam);

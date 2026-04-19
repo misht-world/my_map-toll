@@ -32,6 +32,11 @@ osmium tags-filter --overwrite -o "$OUT" "$IN" \
   w/snow_chains \
   w/snow_chains:conditional \
   w/winter_road \
+  w/seasonal=winter \
+  w/motor_vehicle:conditional \
+  w/vehicle:conditional \
+  w/access:conditional \
+  w/motorcar:conditional \
   r/route=ferry \
   r/boundary=low_emission_zone \
   w/boundary=low_emission_zone \

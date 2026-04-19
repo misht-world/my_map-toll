@@ -17,10 +17,15 @@ export function renderPopup(props: TileProperties, lngLat: LngLat): HTMLElement 
 
   if (props.kind === "lez") {
     const name = (props.name && props.name.length > 0) ? props.name : "Low emission zone";
+    const subtype = detectLezSubtype(name);
     lines.push(
       `<div class="popup-status">🌿 ${escapeHtml(name)}</div>`,
-      `<div class="popup-reason">Low emission / restricted-access zone. Check local rules — vehicle class limits, hours, permits may apply.</div>`,
     );
+    if (subtype) {
+      lines.push(`<div class="popup-reason"><strong>${escapeHtml(subtype.label)}</strong> — ${escapeHtml(subtype.hint)}</div>`);
+    } else {
+      lines.push(`<div class="popup-reason">Low emission / restricted-access zone. Check local rules — vehicle class limits, hours, permits may apply.</div>`);
+    }
   }
   if (props.toll_status && props.toll_status !== "unknown") {
     lines.push(
@@ -34,6 +39,16 @@ export function renderPopup(props: TileProperties, lngLat: LngLat): HTMLElement 
   }
   if ((props as Record<string, unknown>)["ferry_car"]) {
     lines.push(`<div class="popup-status">⛴ Car ferry</div>`);
+  }
+  if (props.seasonal_status && props.seasonal_status !== "unknown") {
+    const label = props.seasonal_status === "winter_only_road"
+      ? "Winter-only road (e.g. ice road / winter track)"
+      : "Closed for the winter season";
+    lines.push(`<div class="popup-status">❄️ ${escapeHtml(label)}</div>`);
+    if (props.seasonal_months) {
+      const verb = props.seasonal_status === "winter_only_road" ? "Open in" : "Closed in";
+      lines.push(`<div class="popup-reason">${verb}: ${escapeHtml(props.seasonal_months)}. Verify with local sources before travel.</div>`);
+    }
   }
 
   const hasValidId = props.osm_id && props.osm_id !== 0;
@@ -65,6 +80,20 @@ export function renderPopup(props: TileProperties, lngLat: LngLat): HTMLElement 
     if (tagsEl) {
       fetchRawTags(props.osm_type ?? "way", props.osm_id)
         .then((tags) => {
+          // For LEZ, refine the subtype headline using fetched tags too —
+          // many city-zone specifics live in description=*, note=*, etc.,
+          // not in name=*.
+          if (props.kind === "lez") {
+            const corpus = [tags.name, tags["name:en"], tags.description, tags.note, tags.operator]
+              .filter(Boolean).join(" ");
+            const sub = detectLezSubtype(corpus);
+            if (sub) {
+              const reasonEl = root.querySelector<HTMLElement>(".popup-reason");
+              if (reasonEl) {
+                reasonEl.innerHTML = `<strong>${escapeHtml(sub.label)}</strong> — ${escapeHtml(sub.hint)}`;
+              }
+            }
+          }
           tagsEl.innerHTML = renderTagsTable(tags);
           if (!tagsEl.innerHTML) tagsEl.remove();
         })
@@ -94,6 +123,54 @@ function renderTagsTable(tags: Record<string, string>): string {
   return `<table>${keys.map(k =>
     `<tr><td>${escapeHtml(k)}</td><td>${escapeHtml(tags[k] ?? "")}</td></tr>`
   ).join("")}</table>`;
+}
+
+/**
+ * Best-effort classification of a low-emission zone from free text. Looks
+ * at name/description/note/operator strings (in any European language) for
+ * well-known programme keywords and returns a short label + plain-English
+ * hint. Returns null if nothing is recognised.
+ */
+function detectLezSubtype(text: string): { label: string; hint: string } | null {
+  const t = text.toLowerCase();
+  // Order matters: more specific patterns first.
+  if (/\bztl\b|zona\s+a\s+traffico\s+limitato/.test(t)) {
+    return { label: "ZTL (Italy)",
+      hint: "Limited-traffic zone, usually city centre. Entry by permit only during posted hours; cameras enforce." };
+  }
+  if (/\bzfe\b|zone\s+(?:à|a)\s+faibles\s+émissions/.test(t)) {
+    return { label: "ZFE (France)",
+      hint: "Low-emission zone. Crit'Air sticker required; older diesels/petrols restricted by class." };
+  }
+  if (/\bulez\b|ultra\s+low\s+emission/.test(t)) {
+    return { label: "ULEZ (London)",
+      hint: "Daily charge unless your vehicle meets Euro 4 (petrol) / Euro 6 (diesel)." };
+  }
+  if (/umweltzone|grüne\s+plakette/.test(t)) {
+    return { label: "Umweltzone (Germany)",
+      hint: "Green sticker (grüne Plakette) required to enter." };
+  }
+  if (/zero\s*[- ]?emission|nul[-\s]?emissie|emisiones?\s+cero/.test(t)) {
+    return { label: "Zero-emission zone",
+      hint: "Only fully electric / hydrogen vehicles allowed (often during posted hours)." };
+  }
+  if (/\bklass\s*3\b|miljözon\s*klass\s*3/.test(t)) {
+    return { label: "Miljözon klass 3 (Sweden)",
+      hint: "Strictest Swedish environmental zone — only zero-emission cars allowed." };
+  }
+  if (/\bklass\s*2\b|miljözon\s*klass\s*2/.test(t)) {
+    return { label: "Miljözon klass 2 (Sweden)",
+      hint: "Petrol Euro 5+ / diesel Euro 6+ required." };
+  }
+  if (/madrid\s+central|zbe|zona\s+de\s+bajas\s+emisiones/.test(t)) {
+    return { label: "ZBE (Spain)",
+      hint: "Low-emission zone. Spanish DGT environmental label (etiqueta) required." };
+  }
+  if (/zona\s+ograniczonej\s+emisji|sczt/.test(t)) {
+    return { label: "Clean-transport zone (Poland)",
+      hint: "SCZT — restricted to low-emission vehicles per local rules." };
+  }
+  return null;
 }
 
 function escapeHtml(s: string): string {

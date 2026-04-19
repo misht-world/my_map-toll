@@ -18,7 +18,7 @@
 
 import { createInterface } from "node:readline";
 import { stdin, stdout, stderr, exit } from "node:process";
-import { interpretToll, interpretChains } from "@mmt/interpreter";
+import { interpretToll, interpretChains, interpretSeasonal } from "@mmt/interpreter";
 import type { TileProperties } from "@mmt/model";
 
 // opening_hours is heavy and may have CJS interop issues.
@@ -46,6 +46,7 @@ const counters = {
   parseErrors: 0,
   toll: { explicit_yes: 0, explicit_no: 0, conditional: 0, ambiguous: 0, unknown: 0 },
   chains: { explicit: 0, conditional: 0, ambiguous: 0, unknown: 0 },
+  seasonal: { winter_closure: 0, winter_only_road: 0, unknown: 0 },
 };
 
 // Highway classes that never carry cars — dropped before any tag analysis.
@@ -135,10 +136,12 @@ try {
     // Drop non-car highway classes outright (defined above the loop).
     if (isHighway && NON_CAR_HIGHWAYS.has(tags["highway"]!)) continue;
 
-    const toll   = interpretToll(tags, parseWhen);
-    const chains = interpretChains(tags, parseWhen);
+    const toll     = interpretToll(tags, parseWhen);
+    const chains   = interpretChains(tags, parseWhen);
+    const seasonal = interpretSeasonal(tags);
     counters.toll[toll.status]++;
     counters.chains[chains.status]++;
+    counters.seasonal[seasonal.status]++;
 
     // Ferry: require *positive confirmation* that the ferry carries cars.
     // route=ferry alone is not enough — many ferries are foot/bike-only
@@ -160,9 +163,10 @@ try {
     // strict ferry-qualification check (no motor_vehicle=yes etc.). A
     // route=ferry tagged toll=yes without car-access info is just an
     // unqualified ferry — drop it from toll, not promote it to a road.
-    const tollIncluded   = !isFerryRoute && toll.status !== "unknown";
-    const chainsIncluded = chains.status !== "unknown";
-    if (!tollIncluded && !chainsIncluded && !ferryOk) continue;
+    const tollIncluded     = !isFerryRoute && toll.status !== "unknown";
+    const chainsIncluded   = chains.status !== "unknown";
+    const seasonalIncluded = !isFerryRoute && seasonal.status !== "unknown";
+    if (!tollIncluded && !chainsIncluded && !ferryOk && !seasonalIncluded) continue;
 
     const outProps: TileProperties & { ferry_car?: boolean } = {
       osm_type: osmType,
@@ -174,6 +178,13 @@ try {
       ...(chainsIncluded && {
         chains_status: chains.status,
         chains_reason: chains.reason_code ?? "",
+      }),
+      ...(seasonalIncluded && {
+        seasonal_status: seasonal.status,
+        seasonal_reason: seasonal.reason_code ?? "",
+        ...(seasonal.months && seasonal.months.length > 0 && {
+          seasonal_months: seasonal.months.join(","),
+        }),
       }),
       ...(ferryOk && { ferry_car: true }),
     };
@@ -196,7 +207,8 @@ try {
 stderr.write(
   `[normalize] DONE total=${counters.total} emitted=${counters.emitted} parseErrors=${counters.parseErrors}\n` +
     `  toll: ${JSON.stringify(counters.toll)}\n` +
-    `  chains: ${JSON.stringify(counters.chains)}\n`,
+    `  chains: ${JSON.stringify(counters.chains)}\n` +
+    `  seasonal: ${JSON.stringify(counters.seasonal)}\n`,
 );
 
 if (counters.emitted === 0 && counters.total > 0) {

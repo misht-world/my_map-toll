@@ -132,6 +132,8 @@ html, body {
     );
   border: 1px solid var(--lez);
 }
+.sw-seasonal-closure { background: #455a64; border: 1px dashed #455a64; }
+.sw-seasonal-winter  { background: #80deea; border: 1px dashed #00838f; }
 
 .hint {
   font-size: 11px;
