@@ -110,7 +110,10 @@ try {
     // or a low-emission zone polygon (boundary=low_emission_zone).
     const isHighway = typeof tags["highway"] === "string" && tags["highway"] !== "";
     const isFerry   = tags["route"] === "ferry";
-    const isLEZ     = tags["boundary"] === "low_emission_zone";
+    // Accept both the canonical boundary= tag and the secondary
+    // low_emission_zone=yes that some mappers use on its own.
+    const isLEZ     = tags["boundary"] === "low_emission_zone"
+                   || tags["low_emission_zone"] === "yes";
     if (!isHighway && !isFerry && !isLEZ) continue;
 
     // LEZ: emit as a polygon feature with a discriminator and bail out

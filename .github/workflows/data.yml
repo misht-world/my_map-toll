@@ -125,8 +125,53 @@ jobs:
           pmtiles convert --force data/europe-overlay.mbtiles data/europe-overlay.pmtiles
           rm -f data/europe-overlay.mbtiles data/europe-enriched.geojsonseq
 
+      # Convert Geofabrik's europe.poly (the exact extent of the source
+      # extract) into a GeoJSON MultiPolygon. The web app draws this as a
+      # dashed outline so users can see where data coverage ends.
+      - name: Generate Europe extent GeoJSON
+        run: |
+          curl -fsSL -o data/europe.poly https://download.geofabrik.de/europe.poly
+          node -e '
+            const fs = require("fs");
+            const lines = fs.readFileSync("data/europe.poly", "utf8").split(/\r?\n/);
+            const polys = []; // [{outer:[], holes:[]}]
+            let inSection = false, isHole = false, pts = [], headerSeen = false;
+            for (const raw of lines) {
+              const line = raw.trim();
+              if (!line) continue;
+              if (!headerSeen && !inSection) { headerSeen = true; continue; }
+              if (line === "END") {
+                if (inSection) {
+                  if (pts.length) {
+                    const ring = (pts[0][0] === pts[pts.length-1][0] && pts[0][1] === pts[pts.length-1][1]) ? pts : [...pts, pts[0]];
+                    if (isHole) {
+                      if (polys.length) polys[polys.length-1].holes.push(ring);
+                    } else {
+                      polys.push({ outer: ring, holes: [] });
+                    }
+                  }
+                  inSection = false; pts = [];
+                }
+                continue;
+              }
+              if (!inSection) {
+                inSection = true;
+                isHole = line.startsWith("!");
+                pts = [];
+                continue;
+              }
+              const m = line.split(/\s+/).map(Number);
+              if (m.length >= 2 && Number.isFinite(m[0]) && Number.isFinite(m[1])) pts.push([m[0], m[1]]);
+            }
+            const coordinates = polys.map(p => [p.outer, ...p.holes]);
+            const geo = { type: "Feature", properties: { name: "Europe (Geofabrik extract extent)" }, geometry: { type: "MultiPolygon", coordinates } };
+            fs.writeFileSync("data/europe-extent.geojson", JSON.stringify(geo));
+            console.log("polygons:", polys.length, "outer points:", polys[0]?.outer.length);
+          '
+          ls -lh data/europe-extent.geojson
+
       - name: Report artifact size
-        run: ls -lh data/europe-overlay.pmtiles
+        run: ls -lh data/europe-overlay.pmtiles data/europe-extent.geojson
 
       - name: Publish to GitHub Release
         env:
@@ -134,10 +179,10 @@ jobs:
         run: |
           TAG="data-$(date +%Y-%m-%d)"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" data/europe-overlay.pmtiles --clobber
+            gh release upload "$TAG" data/europe-overlay.pmtiles data/europe-extent.geojson --clobber
           else
             gh release create "$TAG" \
               --title "Data snapshot $TAG" \
               --notes "PMTiles overlay built from europe-latest.osm.pbf on $(date -u +%Y-%m-%dT%H:%M:%SZ)." \
-              data/europe-overlay.pmtiles
+              data/europe-overlay.pmtiles data/europe-extent.geojson
           fi

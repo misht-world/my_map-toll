@@ -86,6 +86,18 @@ function makeHatchImage(): ImageData {
 // Using `style.load` (not `load`) means this fires for both the initial
 // load AND every subsequent `map.setStyle()` call, because setStyle
 // strips custom sources/layers that aren't part of the new style.
+// Cache the extent GeoJSON so we don't refetch on every style switch.
+let extentGeoJson: object | null = null;
+async function loadExtent() {
+  if (extentGeoJson) return extentGeoJson;
+  try {
+    const r = await fetch(config.extentUrl);
+    if (!r.ok) return null;
+    extentGeoJson = await r.json();
+    return extentGeoJson;
+  } catch { return null; }
+}
+
 function addOverlay() {
   if (!map.hasImage("lez-hatch")) {
     map.addImage("lez-hatch", makeHatchImage(), { pixelRatio: 2 });
@@ -100,6 +112,29 @@ function addOverlay() {
   for (const layer of overlayLayers) {
     if (!map.getLayer(layer.id)) map.addLayer(layer);
   }
+
+  // Data-coverage outline. Loaded once asynchronously then re-added on
+  // each style.load. Always-on, not in any toggle — it's pure context.
+  loadExtent().then((geo) => {
+    if (!geo) return;
+    if (!map.getSource("extent")) {
+      map.addSource("extent", { type: "geojson", data: geo as never });
+    }
+    if (!map.getLayer("extent-outline")) {
+      map.addLayer({
+        id: "extent-outline",
+        type: "line",
+        source: "extent",
+        paint: {
+          "line-color": "#1a1a1a",
+          "line-width": 2,
+          "line-opacity": 0.5,
+          "line-dasharray": [4, 3],
+        },
+      });
+    }
+  });
+
   applyLayerVisibility();
 }
 map.on("style.load", addOverlay);

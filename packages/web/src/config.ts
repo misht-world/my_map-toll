@@ -16,6 +16,11 @@ export const config = {
     env.VITE_PMTILES_URL ??
     "https://github.com/misht-world/my_map-toll/releases/latest/download/europe-overlay.pmtiles",
 
+  /** URL of the data-coverage outline (Geofabrik europe.poly → GeoJSON). */
+  extentUrl:
+    env.VITE_EXTENT_URL ??
+    "https://github.com/misht-world/my_map-toll/releases/latest/download/europe-extent.geojson",
+
   /** Basemap style JSON — OpenFreeMap, free, keyless, global vector tiles.
    *  Default: Liberty (detailed). Users can switch in the panel. */
   basemapStyleUrl:
