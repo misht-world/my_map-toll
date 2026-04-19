@@ -39,7 +39,19 @@ export function parseHash(hash: string, fallback: UrlState): UrlState {
   const layers = params.get("layers");
   if (layers !== null) {
     const set = new Set(layers.split(",").map((s) => s.trim()).filter(Boolean));
-    out.layers = { toll: set.has("toll"), chains: set.has("chains"), ferry: set.has("ferry"), lez: set.has("lez") };
+    // `v` is a hash format version. New URLs we write include v=2, meaning
+    // the layer list is authoritative — anything missing is off. Old URLs
+    // (no v) predate later layers (e.g. lez): for missing layers we fall
+    // back to the default rather than treating them as deliberately off.
+    const authoritative = params.has("v");
+    const get = (name: keyof UrlState["layers"], def: boolean) =>
+      set.has(name) ? true : (authoritative ? false : def);
+    out.layers = {
+      toll:   get("toll",   fallback.layers.toll),
+      chains: get("chains", fallback.layers.chains),
+      ferry:  get("ferry",  fallback.layers.ferry),
+      lez:    get("lez",    fallback.layers.lez),
+    };
   }
 
   return out;
@@ -56,5 +68,6 @@ export function formatHash(state: UrlState): string {
   const params = new URLSearchParams();
   params.set("map", mapParam);
   params.set("layers", activeLayers.join(","));
+  params.set("v", "2"); // see parseHash for semantics
   return "#" + params.toString();
 }

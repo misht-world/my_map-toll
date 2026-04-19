@@ -38,8 +38,8 @@ const ferryToggle  = document.getElementById("toggle-ferry")  as HTMLInputElemen
 const lezToggle    = document.getElementById("toggle-lez")    as HTMLInputElement;
 tollToggle.checked   = initial.layers.toll;
 chainsToggle.checked = initial.layers.chains;
-ferryToggle.checked  = (initial.layers as Record<string, boolean>)["ferry"] ?? true;
-lezToggle.checked    = (initial.layers as Record<string, boolean>)["lez"]   ?? true;
+ferryToggle.checked  = initial.layers.ferry;
+lezToggle.checked    = initial.layers.lez;
 
 // ---------------------------------------------------------------------------
 // Map
@@ -262,8 +262,8 @@ window.addEventListener("hashchange", () => {
   map.jumpTo({ center: [s.lon, s.lat], zoom: s.zoom });
   tollToggle.checked   = s.layers.toll;
   chainsToggle.checked = s.layers.chains;
-  ferryToggle.checked  = (s.layers as Record<string, boolean>)["ferry"] ?? true;
-  lezToggle.checked    = (s.layers as Record<string, boolean>)["lez"]   ?? true;
+  ferryToggle.checked  = s.layers.ferry;
+  lezToggle.checked    = s.layers.lez;
   applyLayerVisibility();
 });
 
