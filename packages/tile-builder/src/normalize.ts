@@ -53,6 +53,8 @@ const counters = {
 const NON_CAR_HIGHWAYS = new Set([
   "footway", "path", "pedestrian", "steps", "cycleway", "bridleway",
   "corridor", "platform", "via_ferrata", "elevator", "escalator",
+  // Not-yet-built or decommissioned roads.
+  "proposed", "construction", "planned", "abandoned", "disused",
 ]);
 
 stderr.write("[normalize] starting…\n");
@@ -79,7 +81,7 @@ try {
     // osmium export --add-unique-id=type_id puts the OSM id as Feature.id
     // in the format "w12345" (way) or "r12345" (relation).
     // Parse that into separate type + numeric id.
-    let osmType: "way" | "relation" = "way";
+    let osmType: "way" | "relation" | "node" = "way";
     let osmId = 0;
     const featId = feat.id ?? rawProps["@id"];
     if (typeof featId === "string") {
@@ -88,6 +90,9 @@ try {
         osmId = parseInt(featId.slice(1), 10) || 0;
       } else if (featId.startsWith("w")) {
         osmType = "way";
+        osmId = parseInt(featId.slice(1), 10) || 0;
+      } else if (featId.startsWith("n")) {
+        osmType = "node";
         osmId = parseInt(featId.slice(1), 10) || 0;
       }
     } else if (typeof featId === "number") {
@@ -108,14 +113,31 @@ try {
     }
 
     // Hard gate: must be a road (highway=*), a ferry (route=ferry),
-    // or a low-emission zone polygon (boundary=low_emission_zone).
-    const isHighway = typeof tags["highway"] === "string" && tags["highway"] !== "";
-    const isFerry   = tags["route"] === "ferry";
+    // a low-emission zone polygon, or a toll-booth node.
+    const isHighway   = typeof tags["highway"] === "string" && tags["highway"] !== "";
+    const isFerry     = tags["route"] === "ferry";
     // Accept both the canonical boundary= tag and the secondary
     // low_emission_zone=yes that some mappers use on its own.
-    const isLEZ     = tags["boundary"] === "low_emission_zone"
-                   || tags["low_emission_zone"] === "yes";
-    if (!isHighway && !isFerry && !isLEZ) continue;
+    const isLEZ       = tags["boundary"] === "low_emission_zone"
+                     || tags["low_emission_zone"] === "yes";
+    const isTollBooth = osmType === "node"
+                     && (tags["barrier"] === "toll_booth"
+                      || tags["highway"] === "toll_gantry");
+    if (!isHighway && !isFerry && !isLEZ && !isTollBooth) continue;
+
+    // Toll booth nodes → emit immediately as a point feature and move on.
+    if (isTollBooth) {
+      const props: TileProperties = {
+        osm_type: "node",
+        osm_id: osmId,
+        kind: "toll_point",
+      };
+      stdout.write(
+        JSON.stringify({ type: "Feature", geometry: feat.geometry, properties: props }) + "\n",
+      );
+      counters.emitted++;
+      continue;
+    }
 
     // LEZ: emit as a polygon feature with a discriminator and bail out
     // before any toll/chains/ferry interpretation runs.
@@ -135,6 +157,11 @@ try {
 
     // Drop non-car highway classes outright (defined above the loop).
     if (isHighway && NON_CAR_HIGHWAYS.has(tags["highway"]!)) continue;
+
+    // Drop roads with no public car access — private driveways, gated
+    // roads, etc. LEZ polygons are already handled above and skipped here.
+    const accessVal = tags["access"];
+    if (accessVal === "private" || accessVal === "no") continue;
 
     const toll     = interpretToll(tags, parseWhen);
     const chains   = interpretChains(tags, parseWhen);

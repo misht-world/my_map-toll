@@ -120,7 +120,7 @@ export interface Segment {
 
 /** Fields that are embedded into the overlay PMTiles. */
 export interface TileProperties {
-  osm_type: "way" | "relation";
+  osm_type: "way" | "relation" | "node";
   osm_id: number;
   toll_status?: TollStatus;
   toll_reason?: string;
@@ -130,8 +130,8 @@ export interface TileProperties {
   seasonal_reason?: string;
   /** Comma-separated month abbreviations of affected/closed period. */
   seasonal_months?: string;
-  /** Discriminator for non-line features (currently: "lez"). */
-  kind?: "lez";
+  /** Discriminator for non-line features. */
+  kind?: "lez" | "toll_point";
   /** OSM `name=*` tag, used by zone features (LEZ) for popup labels. */
   name?: string;
   /** True for car-capable ferries. */

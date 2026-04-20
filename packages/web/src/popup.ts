@@ -15,6 +15,13 @@ export function renderPopup(props: TileProperties, lngLat: LngLat): HTMLElement 
   root.className = "popup";
   const lines: string[] = [];
 
+  if (props.kind === "toll_point") {
+    lines.push(
+      `<div class="popup-status">💰 Toll booth / gantry</div>`,
+      `<div class="popup-reason">Toll collection point. The road through here is likely tolled — check local tariff signs.</div>`,
+    );
+  }
+
   if (props.kind === "lez") {
     const name = (props.name && props.name.length > 0) ? props.name : "Low emission zone";
     const subtype = detectLezSubtype(name);

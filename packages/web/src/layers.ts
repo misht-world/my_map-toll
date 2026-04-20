@@ -8,7 +8,8 @@ export const TOLL_LAYER_IDS   = ["toll-hitbox",   "toll-explicit"]              
 export const CHAINS_LAYER_IDS = ["chains-hitbox",  "chains-explicit", "chains-conditional", "chains-ambiguous"] as const;
 export const FERRY_LAYER_IDS  = ["ferry-hitbox",   "ferry-car"]                 as const;
 export const LEZ_LAYER_IDS    = ["lez-fill",       "lez-outline"]               as const;
-export const SEASONAL_LAYER_IDS = ["seasonal-hitbox", "seasonal-winter-closure", "seasonal-winter-only"] as const;
+export const SEASONAL_LAYER_IDS   = ["seasonal-hitbox", "seasonal-winter-closure", "seasonal-winter-only"] as const;
+export const TOLL_POINT_LAYER_IDS = ["toll-point"] as const;
 
 const base = { type: "line" as const, source: SOURCE, "source-layer": SOURCE_LAYER, minzoom: 3 };
 
@@ -144,6 +145,26 @@ export const overlayLayers: LayerSpecification[] = [
       "line-width": ["interpolate", ["linear"], ["zoom"], 5, 2.5, 12, 5],
       "line-dasharray": [1, 2],
       "line-opacity": 0.95,
+    },
+  },
+
+  // ── Toll booth / gantry nodes ─────────────────────────────────────────────
+  // Small circle markers on point features (barrier=toll_booth,
+  // highway=toll_gantry). Visible from zoom 8 so they don't clutter low zooms.
+
+  {
+    id: "toll-point",
+    type: "circle",
+    source: SOURCE,
+    "source-layer": SOURCE_LAYER,
+    minzoom: 8,
+    filter: ["==", ["get", "kind"], "toll_point"],
+    paint: {
+      "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 4, 13, 8],
+      "circle-color": "#c62828",
+      "circle-stroke-color": "#fff",
+      "circle-stroke-width": 1.5,
+      "circle-opacity": 0.85,
     },
   },
 

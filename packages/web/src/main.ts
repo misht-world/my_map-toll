@@ -3,7 +3,7 @@ import { Protocol } from "pmtiles";
 import type { TileProperties } from "@mmt/model";
 
 import { config } from "./config.js";
-import { overlayLayers, TOLL_LAYER_IDS, CHAINS_LAYER_IDS, FERRY_LAYER_IDS, LEZ_LAYER_IDS, SEASONAL_LAYER_IDS } from "./layers.js";
+import { overlayLayers, TOLL_LAYER_IDS, CHAINS_LAYER_IDS, FERRY_LAYER_IDS, LEZ_LAYER_IDS, SEASONAL_LAYER_IDS, TOLL_POINT_LAYER_IDS } from "./layers.js";
 import { parseCoords } from "./search.js";
 import { parseHash, formatHash, type UrlState } from "./url-state.js";
 import { renderPopup } from "./popup.js";
@@ -182,12 +182,12 @@ styleSelect.addEventListener("change", () => {
 // ---------------------------------------------------------------------------
 // Click → popup  (pass click lngLat for Google Maps link)
 // ---------------------------------------------------------------------------
-const interactiveLayers = [...TOLL_LAYER_IDS, ...CHAINS_LAYER_IDS, ...FERRY_LAYER_IDS, ...LEZ_LAYER_IDS, ...SEASONAL_LAYER_IDS]
+const interactiveLayers = [...TOLL_LAYER_IDS, ...CHAINS_LAYER_IDS, ...FERRY_LAYER_IDS, ...LEZ_LAYER_IDS, ...SEASONAL_LAYER_IDS, ...TOLL_POINT_LAYER_IDS]
   .filter(id => !id.endsWith("-hitbox"));
 
 // Hitbox layers are for hit-testing, visible layers for display.
 // LEZ fill itself is a generous hit-area (whole polygon).
-const allClickLayers = [...TOLL_LAYER_IDS, ...CHAINS_LAYER_IDS, ...FERRY_LAYER_IDS, ...LEZ_LAYER_IDS, ...SEASONAL_LAYER_IDS];
+const allClickLayers = [...TOLL_LAYER_IDS, ...CHAINS_LAYER_IDS, ...FERRY_LAYER_IDS, ...LEZ_LAYER_IDS, ...SEASONAL_LAYER_IDS, ...TOLL_POINT_LAYER_IDS];
 
 map.on("click", (e) => {
   const features = map.queryRenderedFeatures(e.point, { layers: allClickLayers });
