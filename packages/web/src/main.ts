@@ -149,7 +149,10 @@ function applyLayerVisibility() {
     const v = vis ? "visible" : "none";
     for (const id of ids) if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", v);
   };
-  set(TOLL_LAYER_IDS,   tollToggle.checked);
+  // Toll booth / gantry point markers follow the Toll roads toggle —
+  // they're just another signal that this road is tolled.
+  set(TOLL_LAYER_IDS,       tollToggle.checked);
+  set(TOLL_POINT_LAYER_IDS, tollToggle.checked);
   set(CHAINS_LAYER_IDS, chainsToggle.checked);
   set(FERRY_LAYER_IDS,  ferryToggle.checked);
   set(LEZ_LAYER_IDS,      lezToggle.checked);

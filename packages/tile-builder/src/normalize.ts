@@ -159,11 +159,14 @@ try {
     if (isHighway && NON_CAR_HIGHWAYS.has(tags["highway"]!)) continue;
 
     // Drop roads with no public car access — private driveways, gated
-    // roads, forestry/agricultural tracks. LEZ polygons are already handled
-    // above and skipped here.
+    // roads, forestry/agricultural tracks, or unconditional "no cars"
+    // tags. LEZ polygons are already handled above and skipped here.
     const accessVal = tags["access"];
     if (accessVal === "private"   || accessVal === "no"
      || accessVal === "forestry"  || accessVal === "agricultural") continue;
+    // motor_vehicle=no / motorcar=no means cars cannot use this road —
+    // doesn't belong on a car map regardless of toll/chain/seasonal tags.
+    if (tags["motor_vehicle"] === "no" || tags["motorcar"] === "no") continue;
 
     const toll     = interpretToll(tags, parseWhen);
     const chains   = interpretChains(tags, parseWhen);

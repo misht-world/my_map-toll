@@ -62,6 +62,10 @@ export function renderPopup(props: TileProperties, lngLat: LngLat): HTMLElement 
   const lat = lngLat.lat.toFixed(6);
   const lng = lngLat.lng.toFixed(6);
 
+  // Placeholder for Name + source links (website/wikipedia/etc.),
+  // populated after the Overpass fetch completes.
+  lines.push(`<div class="popup-meta" data-role="meta"></div>`);
+
   // Google Maps link — always available from click coordinates
   lines.push(
     `<div class="popup-links">` +
@@ -77,19 +81,28 @@ export function renderPopup(props: TileProperties, lngLat: LngLat): HTMLElement 
   lines.push(`</div>`);
 
   if (hasValidId) {
-    lines.push(`<div class="popup-tags" data-role="tags"><em>Loading tags…</em></div>`);
+    // Collapsed by default — the raw tag dump is noisy and mostly for
+    // power users. The interesting stuff (name, source links) is hoisted
+    // into .popup-meta above.
+    lines.push(
+      `<details class="popup-tags" data-role="tags-details">` +
+      `<summary>All OSM tags</summary>` +
+      `<div data-role="tags"><em>Loading tags…</em></div>` +
+      `</details>`,
+    );
   }
 
   root.innerHTML = lines.join("");
 
   if (hasValidId) {
-    const tagsEl = root.querySelector<HTMLElement>('[data-role="tags"]');
+    const tagsEl  = root.querySelector<HTMLElement>('[data-role="tags"]');
+    const detailsEl = root.querySelector<HTMLElement>('[data-role="tags-details"]');
+    const metaEl  = root.querySelector<HTMLElement>('[data-role="meta"]');
     if (tagsEl) {
       fetchRawTags(props.osm_type ?? "way", props.osm_id)
         .then((tags) => {
-          // For LEZ, refine the subtype headline using fetched tags too —
-          // many city-zone specifics live in description=*, note=*, etc.,
-          // not in name=*.
+          // Refine LEZ subtype classification using fetched tags — many
+          // city-zone specifics live in description=*, note=*, etc.
           if (props.kind === "lez") {
             const corpus = [tags.name, tags["name:en"], tags.description, tags.note, tags.operator]
               .filter(Boolean).join(" ");
@@ -101,14 +114,62 @@ export function renderPopup(props: TileProperties, lngLat: LngLat): HTMLElement 
               }
             }
           }
+          // Hoist name + source links (website/wikipedia/etc.) above the
+          // collapsible tag dump. LEZ already shows name in the status
+          // badge, so skip it there.
+          if (metaEl) {
+            metaEl.innerHTML = renderMeta(tags, props.kind === "lez");
+            if (!metaEl.innerHTML) metaEl.remove();
+          }
           tagsEl.innerHTML = renderTagsTable(tags);
-          if (!tagsEl.innerHTML) tagsEl.remove();
+          if (!tagsEl.innerHTML) detailsEl?.remove();
         })
-        .catch(() => tagsEl.remove()); // silently hide on error
+        .catch(() => detailsEl?.remove()); // silently hide on error
     }
   }
 
   return root;
+}
+
+/**
+ * Pull out user-facing identity + reference links from OSM tags:
+ *   - name (skipped if we already show it in the status badge)
+ *   - website / url / contact:website
+ *   - wikipedia / wikidata (rendered as Wikipedia link)
+ *   - operator name (not as a link, as context)
+ */
+function renderMeta(tags: Record<string, string>, skipName: boolean): string {
+  const parts: string[] = [];
+
+  const name = tags.name ?? tags["name:en"];
+  if (name && !skipName) {
+    parts.push(`<div class="popup-name">${escapeHtml(name)}</div>`);
+  }
+
+  const operator = tags.operator;
+  if (operator) {
+    parts.push(`<div class="popup-operator">Operator: ${escapeHtml(operator)}</div>`);
+  }
+
+  const links: string[] = [];
+  const web = tags.website ?? tags.url ?? tags["contact:website"];
+  if (web && /^https?:\/\//i.test(web)) {
+    links.push(`<a class="popup-link" href="${escapeHtml(web)}" target="_blank" rel="noopener">Official website ↗</a>`);
+  }
+  const wiki = tags.wikipedia;
+  if (wiki) {
+    // Format "lang:Title" → https://lang.wikipedia.org/wiki/Title
+    const m = /^([a-z]{2,3}):(.+)$/.exec(wiki);
+    const href = m
+      ? `https://${m[1]}.wikipedia.org/wiki/${encodeURIComponent(m[2]!.replace(/ /g, "_"))}`
+      : `https://en.wikipedia.org/wiki/${encodeURIComponent(wiki.replace(/ /g, "_"))}`;
+    links.push(`<a class="popup-link" href="${href}" target="_blank" rel="noopener">Wikipedia ↗</a>`);
+  }
+  if (links.length) {
+    parts.push(`<div class="popup-sources">${links.join("")}</div>`);
+  }
+
+  return parts.join("");
 }
 
 async function fetchRawTags(osmType: string, osmId: number): Promise<Record<string, string>> {
@@ -177,8 +238,13 @@ const KEY_LABELS: Record<string, string> = {
   "vehicle:conditional": "Vehicles (conditional)",
   "hgv:conditional": "Trucks (conditional)",
 
-  // max* limits intentionally left raw — OSM unit conventions are
-  // inconsistent and auto-appending units risks misleading labels.
+  // Limits
+  maxspeed: "Max speed",
+  maxweight: "Max weight",
+  maxheight: "Max height",
+  maxlength: "Max length",
+  maxwidth: "Max width",
+  maxaxleload: "Max axle load",
 
   // Zone / barrier
   boundary: "Boundary type",
@@ -214,6 +280,7 @@ const KEY_ORDER = [
   "access", "motorcar", "motor_vehicle", "vehicle", "hgv",
   "access:conditional", "motorcar:conditional", "motor_vehicle:conditional",
   "vehicle:conditional", "hgv:conditional",
+  "maxspeed", "maxweight", "maxheight", "maxlength", "maxwidth", "maxaxleload",
   "opening_hours", "operator", "website",
   "highway", "surface", "boundary", "low_emission_zone", "barrier",
   "note", "description",
@@ -236,6 +303,12 @@ function humanizeValue(key: string, value: string): string {
     const when = cond[2]!.replace(/\s*-\s*/g, " – ");
     return `${v} — ${when}`;
   }
+
+  // Numeric limits with implicit units
+  if (key === "maxspeed" && /^\d+$/.test(trimmed))      return `${trimmed} km/h`;
+  if (key === "maxspeed" && /^\d+\s*mph$/i.test(trimmed)) return trimmed.replace(/\s*mph/i, " mph");
+  if ((key === "maxweight" || key === "maxaxleload") && /^\d+(\.\d+)?$/.test(trimmed)) return `${trimmed} t`;
+  if ((key === "maxheight" || key === "maxlength" || key === "maxwidth") && /^\d+(\.\d+)?$/.test(trimmed)) return `${trimmed} m`;
 
   // Simple dictionary lookup
   return VALUE_LABELS[trimmed] ?? trimmed;

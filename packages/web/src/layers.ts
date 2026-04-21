@@ -5,7 +5,7 @@ const SOURCE_LAYER = "restrictions";
 
 // Layer IDs exposed for toggle logic
 export const TOLL_LAYER_IDS   = ["toll-hitbox",   "toll-explicit"]              as const;
-export const CHAINS_LAYER_IDS = ["chains-hitbox",  "chains-explicit", "chains-conditional", "chains-ambiguous"] as const;
+export const CHAINS_LAYER_IDS = ["chains-hitbox",  "chains-any"] as const;
 export const FERRY_LAYER_IDS  = ["ferry-hitbox",   "ferry-car"]                 as const;
 export const LEZ_LAYER_IDS    = ["lez-fill",       "lez-outline"]               as const;
 export const SEASONAL_LAYER_IDS   = ["seasonal-hitbox", "seasonal-winter-closure", "seasonal-winter-only"] as const;
@@ -91,35 +91,18 @@ export const overlayLayers: LayerSpecification[] = [
     },
   },
 
-  // ── Snow chains ───────────────────────────────────────────────────────────
+  // ── Snow chains (single style for all statuses) ──────────────────────────
+  // Status specifics (required/conditional/possible) are shown in the popup.
+  // A unified visual makes the "chains might matter here" signal easier to
+  // spot at a glance.
 
   {
-    ...base, id: "chains-explicit",
-    filter: ["==", ["get", "chains_status"], "explicit"],
+    ...base, id: "chains-any",
+    filter: ["in", ["get", "chains_status"], ["literal", ["explicit", "conditional", "ambiguous"]]],
     paint: {
       "line-color": "#1565c0",
       "line-width": ["interpolate", ["linear"], ["zoom"], 5, 2.5, 12, 5],
       "line-opacity": 0.9,
-    },
-  },
-  {
-    ...base, id: "chains-conditional",
-    filter: ["==", ["get", "chains_status"], "conditional"],
-    paint: {
-      "line-color": "#0288d1",
-      "line-width": ["interpolate", ["linear"], ["zoom"], 5, 2, 12, 4],
-      "line-dasharray": [3, 2],
-      "line-opacity": 0.85,
-    },
-  },
-  {
-    ...base, id: "chains-ambiguous",
-    filter: ["==", ["get", "chains_status"], "ambiguous"],
-    paint: {
-      "line-color": "#90a4ae",
-      "line-width": ["interpolate", ["linear"], ["zoom"], 5, 1.5, 12, 3],
-      "line-dasharray": [1, 2],
-      "line-opacity": 0.7,
     },
   },
 
