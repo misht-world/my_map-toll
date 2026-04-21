@@ -251,7 +251,7 @@ html, body {
   margin: 6px 0 4px;
 }
 .popup-name {
-  font-weight: 600;
+  color: var(--muted);
   font-size: 12px;
   margin-bottom: 2px;
 }
