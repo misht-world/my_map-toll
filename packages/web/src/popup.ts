@@ -177,11 +177,8 @@ const KEY_LABELS: Record<string, string> = {
   "vehicle:conditional": "Vehicles (conditional)",
   "hgv:conditional": "Trucks (conditional)",
 
-  // Limits (maxspeed/maxheight/maxwidth intentionally left raw — units
-  // in OSM are ambiguous and not worth mis-formatting)
-  maxweight: "Max weight",
-  maxlength: "Max length",
-  maxaxleload: "Max axle load",
+  // max* limits intentionally left raw — OSM unit conventions are
+  // inconsistent and auto-appending units risks misleading labels.
 
   // Zone / barrier
   boundary: "Boundary type",
@@ -217,7 +214,6 @@ const KEY_ORDER = [
   "access", "motorcar", "motor_vehicle", "vehicle", "hgv",
   "access:conditional", "motorcar:conditional", "motor_vehicle:conditional",
   "vehicle:conditional", "hgv:conditional",
-  "maxweight", "maxlength", "maxaxleload",
   "opening_hours", "operator", "website",
   "highway", "surface", "boundary", "low_emission_zone", "barrier",
   "note", "description",
@@ -240,11 +236,6 @@ function humanizeValue(key: string, value: string): string {
     const when = cond[2]!.replace(/\s*-\s*/g, " – ");
     return `${v} — ${when}`;
   }
-
-  // Numeric limits with implicit units. maxspeed/maxheight/maxwidth
-  // left untouched — OSM units there are too ambiguous to auto-format.
-  if ((key === "maxweight" || key === "maxaxleload") && /^\d+(\.\d+)?$/.test(trimmed)) return `${trimmed} t`;
-  if (key === "maxlength" && /^\d+(\.\d+)?$/.test(trimmed)) return `${trimmed} m`;
 
   // Simple dictionary lookup
   return VALUE_LABELS[trimmed] ?? trimmed;
