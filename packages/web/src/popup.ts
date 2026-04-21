@@ -124,12 +124,153 @@ async function fetchRawTags(osmType: string, osmId: number): Promise<Record<stri
   return json.elements?.[0]?.tags ?? {};
 }
 
+// ---------------------------------------------------------------------------
+// Tag humanization
+//
+// Renders raw OSM tags in a more readable form: translates known keys and
+// values to English labels, parses conditional syntax, appends units to
+// numeric limits. Keys we don't recognise are shown as-is so nothing is
+// lost. The original key is kept in a `title` attribute so power users can
+// still inspect it on hover.
+// ---------------------------------------------------------------------------
+
+const KEY_LABELS: Record<string, string> = {
+  name: "Name",
+  "name:en": "Name (EN)",
+  ref: "Road number",
+  highway: "Road class",
+  surface: "Surface",
+  operator: "Operator",
+  website: "Website",
+  note: "Note",
+  description: "Description",
+  opening_hours: "Opening hours",
+
+  // Access classes
+  access: "Access",
+  motor_vehicle: "Motor vehicles",
+  motorcar: "Cars",
+  vehicle: "Vehicles",
+  hgv: "Trucks",
+  bus: "Buses",
+  psv: "Public transport",
+
+  // Toll
+  toll: "Toll",
+  "toll:motorcar": "Toll — cars",
+  "toll:motor_vehicle": "Toll — motor vehicles",
+  "toll:hgv": "Toll — trucks",
+  "toll:conditional": "Toll (conditional)",
+  "toll:motorcar:conditional": "Toll — cars (conditional)",
+  "toll:motor_vehicle:conditional": "Toll — motor veh. (conditional)",
+
+  // Chains / winter
+  snow_chains: "Snow chains",
+  "snow_chains:conditional": "Snow chains (conditional)",
+  winter_road: "Winter road",
+  seasonal: "Seasonal",
+
+  // Conditional access
+  "access:conditional": "Access (conditional)",
+  "motor_vehicle:conditional": "Motor vehicles (conditional)",
+  "motorcar:conditional": "Cars (conditional)",
+  "vehicle:conditional": "Vehicles (conditional)",
+  "hgv:conditional": "Trucks (conditional)",
+
+  // Limits
+  maxspeed: "Max speed",
+  maxweight: "Max weight",
+  maxheight: "Max height",
+  maxlength: "Max length",
+  maxwidth: "Max width",
+  maxaxleload: "Max axle load",
+
+  // Zone / barrier
+  boundary: "Boundary type",
+  low_emission_zone: "Low emission zone",
+  barrier: "Barrier",
+};
+
+const VALUE_LABELS: Record<string, string> = {
+  yes: "Yes",
+  no: "No",
+  permissive: "Permissive",
+  private: "Private",
+  destination: "Local destinations only",
+  designated: "Designated",
+  customers: "Customers only",
+  delivery: "Delivery only",
+  agricultural: "Agricultural only",
+  forestry: "Forestry only",
+  required: "Required",
+  discouraged: "Discouraged",
+  toll_booth: "Toll booth",
+  toll_gantry: "Toll gantry",
+  low_emission_zone: "Low emission zone",
+  ferry: "Ferry",
+};
+
+// Order determines display order; unknown keys come after, sorted.
+const KEY_ORDER = [
+  "name", "name:en", "ref",
+  "toll", "toll:motorcar", "toll:motor_vehicle", "toll:hgv",
+  "toll:conditional", "toll:motorcar:conditional", "toll:motor_vehicle:conditional",
+  "snow_chains", "snow_chains:conditional", "winter_road", "seasonal",
+  "access", "motorcar", "motor_vehicle", "vehicle", "hgv",
+  "access:conditional", "motorcar:conditional", "motor_vehicle:conditional",
+  "vehicle:conditional", "hgv:conditional",
+  "maxspeed", "maxweight", "maxheight", "maxlength", "maxwidth", "maxaxleload",
+  "opening_hours", "operator", "website",
+  "highway", "surface", "boundary", "low_emission_zone", "barrier",
+  "note", "description",
+];
+
+/** Humanize a single tag value. `key` is used for unit-aware formatting. */
+function humanizeValue(key: string, value: string): string {
+  const trimmed = value.trim();
+
+  // Multiple conditional clauses: "yes @ (Mo-Fr); no @ (Sa-Su)"
+  if (trimmed.includes("@") && trimmed.includes(";")) {
+    return trimmed.split(";").map(s => humanizeValue(key, s.trim())).join(" · ");
+  }
+
+  // Single conditional: "no @ (Nov 1-Apr 30)" → "No — Nov 1 – Apr 30"
+  const cond = /^(\S+)\s*@\s*\(([^)]+)\)\s*$/.exec(trimmed);
+  if (cond) {
+    const v = VALUE_LABELS[cond[1]!] ?? cond[1]!;
+    // Prettify inner range: hyphens between months/days → en-dash
+    const when = cond[2]!.replace(/\s*-\s*/g, " – ");
+    return `${v} — ${when}`;
+  }
+
+  // Numeric limits with implicit units
+  if (key === "maxspeed" && /^\d+$/.test(trimmed))      return `${trimmed} km/h`;
+  if (key === "maxspeed" && /^\d+\s*mph$/i.test(trimmed)) return trimmed.replace(/\s*mph/i, " mph");
+  if ((key === "maxweight" || key === "maxaxleload") && /^\d+(\.\d+)?$/.test(trimmed)) return `${trimmed} t`;
+  if ((key === "maxheight" || key === "maxlength" || key === "maxwidth") && /^\d+(\.\d+)?$/.test(trimmed)) return `${trimmed} m`;
+
+  // Simple dictionary lookup
+  return VALUE_LABELS[trimmed] ?? trimmed;
+}
+
+function orderKey(k: string): number {
+  const i = KEY_ORDER.indexOf(k);
+  return i === -1 ? 1000 : i;
+}
+
 function renderTagsTable(tags: Record<string, string>): string {
-  const keys = Object.keys(tags).sort();
+  const keys = Object.keys(tags).filter(k => !k.startsWith("@"));
   if (!keys.length) return "";
-  return `<table>${keys.map(k =>
-    `<tr><td>${escapeHtml(k)}</td><td>${escapeHtml(tags[k] ?? "")}</td></tr>`
-  ).join("")}</table>`;
+  keys.sort((a, b) => {
+    const oa = orderKey(a), ob = orderKey(b);
+    return oa !== ob ? oa - ob : a.localeCompare(b);
+  });
+  return `<table>${keys.map(k => {
+    const label = KEY_LABELS[k] ?? k;
+    const value = humanizeValue(k, tags[k] ?? "");
+    // Keep raw key in title so power users can still see it on hover.
+    return `<tr><td title="${escapeHtml(k)}">${escapeHtml(label)}</td><td>${escapeHtml(value)}</td></tr>`;
+  }).join("")}</table>`;
 }
 
 /**

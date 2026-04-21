@@ -159,9 +159,11 @@ try {
     if (isHighway && NON_CAR_HIGHWAYS.has(tags["highway"]!)) continue;
 
     // Drop roads with no public car access — private driveways, gated
-    // roads, etc. LEZ polygons are already handled above and skipped here.
+    // roads, forestry/agricultural tracks. LEZ polygons are already handled
+    // above and skipped here.
     const accessVal = tags["access"];
-    if (accessVal === "private" || accessVal === "no") continue;
+    if (accessVal === "private"   || accessVal === "no"
+     || accessVal === "forestry"  || accessVal === "agricultural") continue;
 
     const toll     = interpretToll(tags, parseWhen);
     const chains   = interpretChains(tags, parseWhen);
