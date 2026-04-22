@@ -3,6 +3,7 @@
 A free, static web map of European road restrictions — **toll roads for
 passenger cars** and **snow-chain requirements** — built entirely from
 OpenStreetMap. No server, no database, no manually curated data.
+https://misht-world.github.io/my_map-toll/
 
 - Basemap: [OpenFreeMap](https://openfreemap.org/) (free, keyless).
 - Overlay: our own PMTiles, built from a Geofabrik OSM extract.
