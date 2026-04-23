@@ -320,18 +320,11 @@ function orderKey(k: string): number {
 }
 
 function renderTagsTable(tags: Record<string, string>): string {
-  const keys = Object.keys(tags).filter(k => !k.startsWith("@"));
+  const keys = Object.keys(tags).filter(k => !k.startsWith("@")).sort();
   if (!keys.length) return "";
-  keys.sort((a, b) => {
-    const oa = orderKey(a), ob = orderKey(b);
-    return oa !== ob ? oa - ob : a.localeCompare(b);
-  });
-  return `<table>${keys.map(k => {
-    const label = KEY_LABELS[k] ?? k;
-    const value = humanizeValue(k, tags[k] ?? "");
-    // Keep raw key in title so power users can still see it on hover.
-    return `<tr><td title="${escapeHtml(k)}">${escapeHtml(label)}</td><td>${escapeHtml(value)}</td></tr>`;
-  }).join("")}</table>`;
+  return `<table>${keys.map(k =>
+    `<tr><td>${escapeHtml(k)}</td><td>${escapeHtml(tags[k] ?? "")}</td></tr>`
+  ).join("")}</table>`;
 }
 
 /**
