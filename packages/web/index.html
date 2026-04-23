@@ -65,6 +65,23 @@
         </section>
 
         <section class="block">
+          <h2>Route planner</h2>
+          <div id="route-fields">
+            <input class="route-input" data-role="from" type="text" placeholder="From — city, address or lat, lon" />
+            <div id="route-waypoints"></div>
+            <input class="route-input" data-role="to"   type="text" placeholder="To — city, address or lat, lon" />
+          </div>
+          <div class="route-btns">
+            <button id="route-add-via" type="button">+ Via</button>
+            <button id="route-go"      type="button">Find route</button>
+            <button id="route-clear"   type="button" hidden>Clear</button>
+          </div>
+          <p id="route-error"  class="error"  hidden></p>
+          <p id="route-status" class="route-status" hidden></p>
+          <button id="route-gpx" type="button" hidden>Export as GPX ↓</button>
+        </section>
+
+        <section class="block">
           <button id="share-link" type="button">Copy shareable link</button>
           <p id="cursor-coords" class="cursor"></p>
         </section>

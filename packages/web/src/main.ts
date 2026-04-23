@@ -7,6 +7,7 @@ import { overlayLayers, TOLL_LAYER_IDS, CHAINS_LAYER_IDS, FERRY_LAYER_IDS, LEZ_L
 import { parseCoords } from "./search.js";
 import { parseHash, formatHash, type UrlState } from "./url-state.js";
 import { renderPopup } from "./popup.js";
+import { geocode, fetchRoute, fmtDistance, fmtDuration, toGpx } from "./routing.js";
 
 // ---------------------------------------------------------------------------
 // PMTiles protocol
@@ -319,4 +320,154 @@ if (mobileMQ.matches) {
 panelToggle.addEventListener("click", () => {
   panel.classList.toggle("collapsed");
   panelToggle.textContent = panel.classList.contains("collapsed") ? "☰" : "✕";
+});
+
+// ---------------------------------------------------------------------------
+// Route planner
+// ---------------------------------------------------------------------------
+const routeErrorEl  = document.getElementById("route-error")  as HTMLElement;
+const routeStatusEl = document.getElementById("route-status") as HTMLElement;
+const routeGpxBtn   = document.getElementById("route-gpx")    as HTMLButtonElement;
+const routeClearBtn = document.getElementById("route-clear")  as HTMLButtonElement;
+const routeGoBtn    = document.getElementById("route-go")     as HTMLButtonElement;
+const routeAddVia   = document.getElementById("route-add-via") as HTMLButtonElement;
+const routeWaypoints = document.getElementById("route-waypoints") as HTMLElement;
+
+let routeGeometry: GeoJSON.LineString | null = null;
+let routeMarkers: maplibregl.Marker[] = [];
+
+// Up to 3 intermediate "via" inputs (user-addable).
+routeAddVia.addEventListener("click", () => {
+  const existing = routeWaypoints.querySelectorAll(".route-input").length;
+  if (existing >= 3) return;
+  const inp = document.createElement("input");
+  inp.type = "text";
+  inp.className = "route-input";
+  inp.placeholder = `Via ${existing + 1} — city, address or lat, lon`;
+  routeWaypoints.appendChild(inp);
+  if (existing + 1 >= 3) routeAddVia.disabled = true;
+});
+
+function getRouteInputs(): HTMLInputElement[] {
+  const from = document.querySelector<HTMLInputElement>(".route-input[data-role='from']")!;
+  const to   = document.querySelector<HTMLInputElement>(".route-input[data-role='to']")!;
+  const vias = Array.from(routeWaypoints.querySelectorAll<HTMLInputElement>(".route-input"));
+  return [from, ...vias, to];
+}
+
+function clearRoute() {
+  if (map.getLayer("route-line"))   map.removeLayer("route-line");
+  if (map.getLayer("route-casing")) map.removeLayer("route-casing");
+  if (map.getSource("route"))       map.removeSource("route");
+  routeMarkers.forEach(m => m.remove());
+  routeMarkers = [];
+  routeGeometry = null;
+  routeErrorEl.hidden  = true;
+  routeStatusEl.hidden = true;
+  routeGpxBtn.hidden   = true;
+  routeClearBtn.hidden = true;
+}
+routeClearBtn.addEventListener("click", clearRoute);
+
+routeGoBtn.addEventListener("click", async () => {
+  clearRoute();
+  routeErrorEl.hidden = true;
+  routeStatusEl.hidden = true;
+  routeGoBtn.disabled = true;
+  routeGoBtn.textContent = "Routing…";
+
+  try {
+    const inputs = getRouteInputs();
+    const points: [number, number][] = [];
+
+    for (const inp of inputs) {
+      const q = inp.value.trim();
+      if (!q) continue;
+      const pt = await geocode(q);
+      if (!pt) {
+        routeErrorEl.textContent = `Could not find: "${q}"`;
+        routeErrorEl.hidden = false;
+        return;
+      }
+      points.push(pt);
+    }
+
+    if (points.length < 2) {
+      routeErrorEl.textContent = "Enter at least From and To.";
+      routeErrorEl.hidden = false;
+      return;
+    }
+
+    const result = await fetchRoute(points);
+    if (!result) {
+      routeErrorEl.textContent = "Could not calculate route. Try again or check coordinates.";
+      routeErrorEl.hidden = false;
+      return;
+    }
+
+    routeGeometry = result.geometry;
+
+    // Draw route: white casing + coloured line on top for legibility.
+    const routeGeoJson: GeoJSON.Feature<GeoJSON.LineString> = {
+      type: "Feature", geometry: result.geometry, properties: {},
+    };
+    map.addSource("route", { type: "geojson", data: routeGeoJson });
+    map.addLayer({
+      id: "route-casing",
+      type: "line",
+      source: "route",
+      paint: { "line-color": "#fff", "line-width": 7, "line-opacity": 0.8 },
+    });
+    map.addLayer({
+      id: "route-line",
+      type: "line",
+      source: "route",
+      paint: {
+        "line-color": "#e65100",
+        "line-width": 4,
+        "line-opacity": 0.95,
+      },
+    });
+
+    // Place markers at each waypoint.
+    const colors = ["#e65100", "#555", "#555", "#555", "#1b5e20"];
+    points.forEach(([lon, lat], i) => {
+      const color = i === 0 ? colors[0]! : i === points.length - 1 ? colors[4]! : colors[1]!;
+      const m = new maplibregl.Marker({ color })
+        .setLngLat([lon, lat]).addTo(map);
+      routeMarkers.push(m);
+    });
+
+    // Fit map to route bounds.
+    const coords = result.geometry.coordinates as [number, number][];
+    const lons = coords.map(c => c[0]);
+    const lats = coords.map(c => c[1]);
+    map.fitBounds(
+      [[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]],
+      { padding: 60, maxZoom: 12 },
+    );
+
+    routeStatusEl.textContent =
+      `${fmtDistance(result.distanceM)} · ${fmtDuration(result.durationS)} · Route shown over restriction layers`;
+    routeStatusEl.hidden = false;
+    routeGpxBtn.hidden   = false;
+    routeClearBtn.hidden = false;
+
+  } finally {
+    routeGoBtn.disabled = false;
+    routeGoBtn.textContent = "Find route";
+  }
+});
+
+routeGpxBtn.addEventListener("click", () => {
+  if (!routeGeometry) return;
+  const from = document.querySelector<HTMLInputElement>(".route-input[data-role='from']")?.value ?? "A";
+  const to   = document.querySelector<HTMLInputElement>(".route-input[data-role='to']")?.value   ?? "B";
+  const gpx  = toGpx(routeGeometry, `${from} → ${to}`);
+  const blob = new Blob([gpx], { type: "application/gpx+xml" });
+  const a    = document.createElement("a");
+  a.href     = URL.createObjectURL(blob);
+  a.download = "route.gpx";
+  a.click();
+  URL.revokeObjectURL(a.href);
 });
