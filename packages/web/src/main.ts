@@ -112,6 +112,14 @@ function addOverlay() {
       attribution: "© OpenStreetMap contributors (ODbL)",
     });
   }
+  // Empty GeoJSON source for the route. Layers referencing it are in
+  // overlayLayers (below restriction lines); content set via setData().
+  if (!map.getSource("route")) {
+    map.addSource("route", {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    });
+  }
   for (const layer of overlayLayers) {
     if (!map.getLayer(layer.id)) map.addLayer(layer);
   }
@@ -241,10 +249,58 @@ const cursorEl = document.getElementById("cursor-coords") as HTMLElement;
 map.on("mousemove", (e) => {
   cursorEl.textContent = `${e.lngLat.lat.toFixed(5)}, ${e.lngLat.lng.toFixed(5)}`;
 });
-map.on("contextmenu", async (e) => {
-  const text = `${e.lngLat.lat.toFixed(5)}, ${e.lngLat.lng.toFixed(5)}`;
-  try { await navigator.clipboard.writeText(text); cursorEl.textContent = `Copied: ${text}`; }
-  catch { /* ignore */ }
+// ---------------------------------------------------------------------------
+// Context menu (right-click / long-press)
+// ---------------------------------------------------------------------------
+const ctxMenu = document.getElementById("map-ctx-menu") as HTMLElement;
+let ctxLngLat: maplibregl.LngLat | null = null;
+
+function showCtxMenu(lngLat: maplibregl.LngLat, x: number, y: number) {
+  ctxLngLat = lngLat;
+  const mapRect = map.getContainer().getBoundingClientRect();
+  ctxMenu.style.left = `${x - mapRect.left}px`;
+  ctxMenu.style.top  = `${y - mapRect.top}px`;
+  ctxMenu.hidden = false;
+}
+function hideCtxMenu() { ctxMenu.hidden = true; }
+
+map.on("contextmenu", (e) => {
+  showCtxMenu(e.lngLat, e.originalEvent.clientX, e.originalEvent.clientY);
+});
+map.on("click", () => hideCtxMenu());
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") hideCtxMenu(); });
+
+// Long-press on mobile (600 ms, cancel on move)
+let longPressTimer: number | undefined;
+let longPressPos = { x: 0, y: 0 };
+map.getCanvas().addEventListener("touchstart", (e) => {
+  if (e.touches.length !== 1) return;
+  const t = e.touches[0]!;
+  longPressPos = { x: t.clientX, y: t.clientY };
+  longPressTimer = window.setTimeout(() => {
+    const rect = map.getContainer().getBoundingClientRect();
+    const pt = map.unproject([longPressPos.x - rect.left, longPressPos.y - rect.top]);
+    showCtxMenu(pt, longPressPos.x, longPressPos.y);
+  }, 600);
+}, { passive: true });
+map.getCanvas().addEventListener("touchmove",  () => window.clearTimeout(longPressTimer), { passive: true });
+map.getCanvas().addEventListener("touchend",   () => window.clearTimeout(longPressTimer), { passive: true });
+
+ctxMenu.addEventListener("click", async (e) => {
+  const btn = (e.target as HTMLElement).closest("button[data-action]") as HTMLButtonElement | null;
+  if (!btn || !ctxLngLat) return;
+  const action = btn.dataset["action"];
+  hideCtxMenu();
+  if (action === "copy") {
+    const text = `${ctxLngLat.lat.toFixed(5)}, ${ctxLngLat.lng.toFixed(5)}`;
+    try { await navigator.clipboard.writeText(text); cursorEl.textContent = `Copied: ${text}`; }
+    catch { /* ignore */ }
+    return;
+  }
+  const ll = ctxLngLat;
+  if (action === "start") addWp(ll, 0);
+  else if (action === "end") addWp(ll, wps.length);
+  else if (action === "via") addWp(ll);
 });
 
 // ---------------------------------------------------------------------------
@@ -323,147 +379,150 @@ panelToggle.addEventListener("click", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Route planner
+// Route planner — waypoint-based (up to 20 points, draggable markers)
 // ---------------------------------------------------------------------------
+interface WayPoint { lngLat: maplibregl.LngLat; marker: maplibregl.Marker; }
+const MAX_WP = 20;
+const WP_LABELS = "ABCDEFGHIJKLMNOPQRST";
+const wps: WayPoint[] = [];
+
 const routeErrorEl  = document.getElementById("route-error")  as HTMLElement;
 const routeStatusEl = document.getElementById("route-status") as HTMLElement;
 const routeGpxBtn   = document.getElementById("route-gpx")    as HTMLButtonElement;
 const routeClearBtn = document.getElementById("route-clear")  as HTMLButtonElement;
-const routeGoBtn    = document.getElementById("route-go")     as HTMLButtonElement;
-const routeAddVia   = document.getElementById("route-add-via") as HTMLButtonElement;
-const routeWaypoints = document.getElementById("route-waypoints") as HTMLElement;
+const srchInput     = document.getElementById("route-search-input") as HTMLInputElement;
+const srchAddBtn    = document.getElementById("route-search-add")   as HTMLButtonElement;
+const wpListEl      = document.getElementById("route-wp-list")      as HTMLElement;
 
 let routeGeometry: GeoJSON.LineString | null = null;
-let routeMarkers: maplibregl.Marker[] = [];
 
-// Up to 3 intermediate "via" inputs (user-addable).
-routeAddVia.addEventListener("click", () => {
-  const existing = routeWaypoints.querySelectorAll(".route-input").length;
-  if (existing >= 3) return;
-  const inp = document.createElement("input");
-  inp.type = "text";
-  inp.className = "route-input";
-  inp.placeholder = `Via ${existing + 1} — city, address or lat, lon`;
-  routeWaypoints.appendChild(inp);
-  if (existing + 1 >= 3) routeAddVia.disabled = true;
-});
-
-function getRouteInputs(): HTMLInputElement[] {
-  const from = document.querySelector<HTMLInputElement>(".route-input[data-role='from']")!;
-  const to   = document.querySelector<HTMLInputElement>(".route-input[data-role='to']")!;
-  const vias = Array.from(routeWaypoints.querySelectorAll<HTMLInputElement>(".route-input"));
-  return [from, ...vias, to];
+function addWp(lngLat: maplibregl.LngLat, idx?: number) {
+  if (wps.length >= MAX_WP) return;
+  const insertAt = idx !== undefined ? Math.max(0, Math.min(idx, wps.length)) : wps.length;
+  const marker = new maplibregl.Marker({ draggable: true, color: "#e65100" })
+    .setLngLat(lngLat).addTo(map);
+  marker.on("dragend", () => {
+    const wp = wps.find(w => w.marker === marker);
+    if (wp) { wp.lngLat = marker.getLngLat(); void rebuildRoute(); }
+  });
+  wps.splice(insertAt, 0, { lngLat, marker });
+  renderWpList();
+  void rebuildRoute();
 }
 
-function clearRoute() {
-  if (map.getLayer("route-line"))   map.removeLayer("route-line");
-  if (map.getLayer("route-casing")) map.removeLayer("route-casing");
-  if (map.getSource("route"))       map.removeSource("route");
-  routeMarkers.forEach(m => m.remove());
-  routeMarkers = [];
+function removeWp(idx: number) {
+  if (idx < 0 || idx >= wps.length) return;
+  wps[idx]!.marker.remove();
+  wps.splice(idx, 1);
+  renderWpList();
+  void rebuildRoute();
+}
+
+function renderWpList() {
+  wpListEl.innerHTML = "";
+  wps.forEach((wp, i) => {
+    const li = document.createElement("li");
+    li.className = "route-wp-item";
+    const label = document.createElement("span");
+    label.className = "route-wp-label";
+    label.textContent = WP_LABELS[i] ?? String(i + 1);
+    const coords = document.createElement("span");
+    coords.className = "route-wp-coords";
+    coords.textContent = `${wp.lngLat.lat.toFixed(4)}, ${wp.lngLat.lng.toFixed(4)}`;
+    const rm = document.createElement("button");
+    rm.className = "route-wp-rm";
+    rm.textContent = "✕";
+    rm.title = "Remove waypoint";
+    rm.addEventListener("click", () => removeWp(i));
+    li.append(label, coords, rm);
+    wpListEl.appendChild(li);
+  });
+  routeClearBtn.hidden = wps.length === 0;
+}
+
+async function rebuildRoute() {
+  const src = map.getSource("route") as maplibregl.GeoJSONSource | undefined;
+  if (src) src.setData({ type: "FeatureCollection", features: [] });
   routeGeometry = null;
-  routeErrorEl.hidden  = true;
-  routeStatusEl.hidden = true;
-  routeGpxBtn.hidden   = true;
-  routeClearBtn.hidden = true;
-}
-routeClearBtn.addEventListener("click", clearRoute);
-
-routeGoBtn.addEventListener("click", async () => {
-  clearRoute();
+  routeGpxBtn.hidden = true;
   routeErrorEl.hidden = true;
   routeStatusEl.hidden = true;
-  routeGoBtn.disabled = true;
-  routeGoBtn.textContent = "Routing…";
 
-  try {
-    const inputs = getRouteInputs();
-    const points: [number, number][] = [];
+  if (wps.length < 2) return;
 
-    for (const inp of inputs) {
-      const q = inp.value.trim();
-      if (!q) continue;
-      const pt = await geocode(q);
-      if (!pt) {
-        routeErrorEl.textContent = `Could not find: "${q}"`;
-        routeErrorEl.hidden = false;
-        return;
-      }
-      points.push(pt);
-    }
-
-    if (points.length < 2) {
-      routeErrorEl.textContent = "Enter at least From and To.";
-      routeErrorEl.hidden = false;
-      return;
-    }
-
-    const result = await fetchRoute(points);
-    if (!result) {
-      routeErrorEl.textContent = "Could not calculate route. Try again or check coordinates.";
-      routeErrorEl.hidden = false;
-      return;
-    }
-
-    routeGeometry = result.geometry;
-
-    // Draw route: white casing + coloured line on top for legibility.
-    const routeGeoJson: GeoJSON.Feature<GeoJSON.LineString> = {
-      type: "Feature", geometry: result.geometry, properties: {},
-    };
-    map.addSource("route", { type: "geojson", data: routeGeoJson });
-    map.addLayer({
-      id: "route-casing",
-      type: "line",
-      source: "route",
-      paint: { "line-color": "#fff", "line-width": 7, "line-opacity": 0.8 },
-    });
-    map.addLayer({
-      id: "route-line",
-      type: "line",
-      source: "route",
-      paint: {
-        "line-color": "#e65100",
-        "line-width": 4,
-        "line-opacity": 0.95,
-      },
-    });
-
-    // Place markers at each waypoint.
-    const colors = ["#e65100", "#555", "#555", "#555", "#1b5e20"];
-    points.forEach(([lon, lat], i) => {
-      const color = i === 0 ? colors[0]! : i === points.length - 1 ? colors[4]! : colors[1]!;
-      const m = new maplibregl.Marker({ color })
-        .setLngLat([lon, lat]).addTo(map);
-      routeMarkers.push(m);
-    });
-
-    // Fit map to route bounds.
-    const coords = result.geometry.coordinates as [number, number][];
-    const lons = coords.map(c => c[0]);
-    const lats = coords.map(c => c[1]);
-    map.fitBounds(
-      [[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]],
-      { padding: 60, maxZoom: 12 },
-    );
-
-    routeStatusEl.textContent =
-      `${fmtDistance(result.distanceM)} · ${fmtDuration(result.durationS)} · Route shown over restriction layers`;
-    routeStatusEl.hidden = false;
-    routeGpxBtn.hidden   = false;
-    routeClearBtn.hidden = false;
-
-  } finally {
-    routeGoBtn.disabled = false;
-    routeGoBtn.textContent = "Find route";
+  const points = wps.map(w => [w.lngLat.lng, w.lngLat.lat] as [number, number]);
+  const result = await fetchRoute(points);
+  if (!result) {
+    routeErrorEl.textContent = "Could not calculate route. Check waypoints or try again.";
+    routeErrorEl.hidden = false;
+    return;
   }
+
+  routeGeometry = result.geometry;
+  const feature: GeoJSON.Feature<GeoJSON.LineString> = {
+    type: "Feature", geometry: result.geometry, properties: {},
+  };
+  if (src) src.setData({ type: "FeatureCollection", features: [feature] });
+
+  routeStatusEl.textContent = `${fmtDistance(result.distanceM)} · ${fmtDuration(result.durationS)}`;
+  routeStatusEl.hidden = false;
+  routeGpxBtn.hidden = false;
+
+  const coords = result.geometry.coordinates as [number, number][];
+  const lons = coords.map(c => c[0]);
+  const lats = coords.map(c => c[1]);
+  map.fitBounds(
+    [[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]],
+    { padding: 60, maxZoom: 14 },
+  );
+}
+
+function clearAllRoute() {
+  wps.forEach(w => w.marker.remove());
+  wps.length = 0;
+  renderWpList();
+  const src = map.getSource("route") as maplibregl.GeoJSONSource | undefined;
+  if (src) src.setData({ type: "FeatureCollection", features: [] });
+  routeGeometry = null;
+  routeGpxBtn.hidden = true;
+  routeErrorEl.hidden = true;
+  routeStatusEl.hidden = true;
+}
+
+routeClearBtn.addEventListener("click", clearAllRoute);
+
+srchAddBtn.addEventListener("click", async () => {
+  const q = srchInput.value.trim();
+  if (!q) return;
+  srchAddBtn.disabled = true;
+  srchAddBtn.textContent = "…";
+  try {
+    const pt = await geocode(q);
+    if (!pt) {
+      routeErrorEl.textContent = `Could not find: "${q}"`;
+      routeErrorEl.hidden = false;
+      return;
+    }
+    srchInput.value = "";
+    routeErrorEl.hidden = true;
+    addWp(new maplibregl.LngLat(pt[0], pt[1]));
+    map.flyTo({ center: pt, zoom: Math.max(map.getZoom(), 10) });
+  } finally {
+    srchAddBtn.disabled = false;
+    srchAddBtn.textContent = "Add";
+  }
+});
+
+srchInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") srchAddBtn.click();
 });
 
 routeGpxBtn.addEventListener("click", () => {
   if (!routeGeometry) return;
-  const from = document.querySelector<HTMLInputElement>(".route-input[data-role='from']")?.value ?? "A";
-  const to   = document.querySelector<HTMLInputElement>(".route-input[data-role='to']")?.value   ?? "B";
-  const gpx  = toGpx(routeGeometry, `${from} → ${to}`);
+  const name = wps.length >= 2
+    ? `${WP_LABELS[0] ?? "A"} → ${WP_LABELS[wps.length - 1] ?? "B"}`
+    : "Route";
+  const gpx  = toGpx(routeGeometry, name);
   const blob = new Blob([gpx], { type: "application/gpx+xml" });
   const a    = document.createElement("a");
   a.href     = URL.createObjectURL(blob);
