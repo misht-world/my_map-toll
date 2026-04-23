@@ -166,7 +166,8 @@ try {
      || accessVal === "forestry"  || accessVal === "agricultural") continue;
     // motor_vehicle=no / motorcar=no means cars cannot use this road —
     // doesn't belong on a car map regardless of toll/chain/seasonal tags.
-    if (tags["motor_vehicle"] === "no" || tags["motorcar"] === "no") continue;
+    if (tags["motor_vehicle"] === "no" || tags["motor_vehicle"] === "agricultural"
+     || tags["motorcar"]      === "no") continue;
 
     const toll     = interpretToll(tags, parseWhen);
     const chains   = interpretChains(tags, parseWhen);

@@ -53,6 +53,8 @@ const map = new MLMap({
   center: [initial.lon, initial.lat],
   zoom: initial.zoom,
   attributionControl: { compact: true },
+  // Disable right-click drag-rotate so RMB shows our context menu instead.
+  dragRotate: false,
 });
 
 // showCompass:true renders the rotation indicator — click it to reset north.
