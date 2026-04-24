@@ -397,11 +397,24 @@ details.block > .block-body { padding-top: 6px; }
 
 /* ── Custom map markers ─────────────────────────────────────── */
 
-.route-wp-marker {
+/* Outer shell: fixed 24×24 px — MapLibre anchors on this with
+   anchor:"center" → always translate(-50%,-50%) = -12px.
+   The shell is transparent; only the inner dot is visible. */
+.route-wp-shell {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+}
+.route-wp-shell:active { cursor: grabbing; }
+
+/* Inner dot: changes size/colour/text per role without touching the shell */
+.route-wp-dot {
   border-radius: 50%;
   border: 2.5px solid #fff;
   box-shadow: 0 1px 6px rgba(0,0,0,0.5);
-  cursor: grab;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -411,13 +424,12 @@ details.block > .block-body { padding-top: 6px; }
   line-height: 1;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   user-select: none;
+  pointer-events: none; /* shell handles events */
 }
-/* Start = green, 20 px, letter "S" */
-.route-wp-marker--start { background: #2e7d32; width: 20px; height: 20px; }
-/* End   = red,   20 px, letter "F" (finish) */
-.route-wp-marker--end   { background: #c62828; width: 20px; height: 20px; }
-/* Via   = orange, 11 px, no text */
-.route-wp-marker--via   { background: #e65100; width: 11px; height: 11px; border-width: 2px; }
+/* Start = green 20 px "S", End = red 20 px "F", Via = orange 11 px */
+.route-wp-dot--start { background: #2e7d32; width: 20px; height: 20px; }
+.route-wp-dot--end   { background: #c62828; width: 20px; height: 20px; }
+.route-wp-dot--via   { background: #e65100; width: 11px; height: 11px; border-width: 2px; }
 
 /* ── Waypoint list ──────────────────────────────────────────── */
 

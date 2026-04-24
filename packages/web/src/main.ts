@@ -385,7 +385,15 @@ panelToggle.addEventListener("click", () => {
 // ---------------------------------------------------------------------------
 // Route planner — waypoint-based (up to 20 points, draggable markers)
 // ---------------------------------------------------------------------------
-interface WayPoint { lngLat: maplibregl.LngLat; marker: maplibregl.Marker; el: HTMLElement; }
+// WayPoint stores both the outer shell (MapLibre anchors on this — always
+// 24×24 px so the transform offset never changes) and the inner dot (changes
+// size/colour when the role changes without affecting the anchor geometry).
+interface WayPoint {
+  lngLat: maplibregl.LngLat;
+  marker: maplibregl.Marker;
+  shell: HTMLElement;   // fixed-size outer div — MapLibre's anchor target
+  dot:   HTMLElement;   // inner div that carries colour / letter / size
+}
 const MAX_WP = 20;
 const WP_LABELS = "ABCDEFGHIJKLMNOPQRST";
 const wps: WayPoint[] = [];
@@ -406,35 +414,37 @@ function wpRole(i: number): WpRole {
   return i === 0 ? "start" : i === wps.length - 1 ? "end" : "via";
 }
 
-function makeWpEl(): HTMLElement {
-  const el = document.createElement("div");
-  el.className = "route-wp-marker route-wp-marker--via";
-  return el;
+function makeMarkerEl(): { shell: HTMLElement; dot: HTMLElement } {
+  const shell = document.createElement("div");
+  shell.className = "route-wp-shell";          // fixed 24×24 px — never changes
+  const dot = document.createElement("div");
+  dot.className = "route-wp-dot route-wp-dot--via";
+  shell.appendChild(dot);
+  return { shell, dot };
 }
 
-/** Update every marker's CSS class + label to reflect its current role. */
+/** Update every marker's dot class + label to reflect its current role. */
 function relabelMarkers() {
   wps.forEach((wp, i) => {
     const role = wpRole(i);
-    wp.el.className = `route-wp-marker route-wp-marker--${role}`;
-    // Show "S" / "F" inside start/end circles so they're instantly distinguishable.
-    wp.el.textContent = role === "start" ? "S" : role === "end" ? "F" : "";
+    wp.dot.className = `route-wp-dot route-wp-dot--${role}`;
+    wp.dot.textContent = role === "start" ? "S" : role === "end" ? "F" : "";
   });
 }
 
 function addWp(lngLat: maplibregl.LngLat, idx?: number) {
   if (wps.length >= MAX_WP) return;
   const insertAt = idx !== undefined ? Math.max(0, Math.min(idx, wps.length)) : wps.length;
-  const el = makeWpEl();
-  // anchor:"center" keeps the circle visually centred on the coordinate at all zoom levels.
-  // The default "bottom" is correct for pin-shaped markers but wrong for circles.
-  const marker = new maplibregl.Marker({ element: el, draggable: true, anchor: "center" })
+  const { shell, dot } = makeMarkerEl();
+  // anchor:"center" on the 24×24 shell — this never changes size so the
+  // translate(-50%,-50%) offset is always exactly -12px and never drifts.
+  const marker = new maplibregl.Marker({ element: shell, draggable: true, anchor: "center" })
     .setLngLat(lngLat).addTo(map);
   marker.on("dragend", () => {
     const wp = wps.find(w => w.marker === marker);
     if (wp) { wp.lngLat = marker.getLngLat(); void rebuildRoute(); }
   });
-  wps.splice(insertAt, 0, { lngLat, marker, el });
+  wps.splice(insertAt, 0, { lngLat, marker, shell, dot });
   relabelMarkers();
   renderWpList();
   void rebuildRoute();
