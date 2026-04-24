@@ -10,6 +10,15 @@
   <body>
     <div id="map"></div>
 
+    <!-- Map context menu (right-click / long-press) -->
+    <div id="map-ctx-menu" class="map-ctx-menu" hidden>
+      <button data-action="start">📍 Set as start</button>
+      <button data-action="via">↕ Add via point</button>
+      <button data-action="end">🏁 Set as end</button>
+      <hr>
+      <button data-action="copy">Copy coordinates</button>
+    </div>
+
     <aside id="panel">
       <header>
         <div>
@@ -20,67 +29,85 @@
       </header>
 
       <div id="panel-body">
-        <section class="block">
-          <h2>Layers</h2>
-          <label><input type="checkbox" id="toggle-toll"   checked /> Toll roads (cars)</label>
-          <label><input type="checkbox" id="toggle-chains" checked /> Snow chains required</label>
-          <label><input type="checkbox" id="toggle-ferry"  checked /> Car ferries</label>
-          <label><input type="checkbox" id="toggle-lez"    checked /> Low emission zones</label>
-          <label><input type="checkbox" id="toggle-seasonal" checked /> Seasonal closures</label>
-        </section>
 
-        <section class="block">
-          <h2>Legend</h2>
-          <ul class="legend">
-            <li><span class="sw sw-toll-yes"></span> Toll: yes</li>
-            <li><span class="sw sw-toll-point"></span> Toll booth / gantry</li>
-            <li><span class="sw sw-chains-yes"></span> Snow chains may be required</li>
-            <li><span class="sw sw-ferry"></span> Car ferry</li>
-            <li><span class="sw sw-lez"></span> Low emission zone</li>
-            <li><span class="sw sw-seasonal-closure"></span> Winter closure (mountain pass)</li>
-            <li><span class="sw sw-seasonal-winter"></span> Winter-only road (e.g. ice road)</li>
-          </ul>
-          <p class="hint">
-            Click a line/zone for details — status (required vs. conditional vs. possible),
-            affected months, source links when available.
-          </p>
-        </section>
-
-        <section class="block">
-          <h2>Map style</h2>
-          <select id="style-select">
-            <option value="https://tiles.openfreemap.org/styles/liberty" selected>Detailed (Liberty)</option>
-            <option value="https://tiles.openfreemap.org/styles/positron">Light (Positron)</option>
-            <option value="https://tiles.openfreemap.org/styles/bright">Bright</option>
-          </select>
-        </section>
-
-        <section class="block">
-          <h2>Search by coordinates</h2>
-          <form id="coord-form">
-            <input id="coord-input" type="text" placeholder="47.4979, 19.0402" />
-            <button type="submit">Go</button>
-          </form>
-          <p id="coord-error" class="error" hidden></p>
-        </section>
-
-        <section class="block">
-          <h2>Route planner</h2>
-          <div id="route-fields">
-            <input class="route-input" data-role="from" type="text" placeholder="From — city, address or lat, lon" />
-            <div id="route-waypoints"></div>
-            <input class="route-input" data-role="to"   type="text" placeholder="To — city, address or lat, lon" />
+        <!-- Route planner — open by default -->
+        <details class="block" open>
+          <summary>Route planner</summary>
+          <div class="block-body">
+            <p class="hint" style="margin-top:0">
+              Right-click on map (long-press on mobile) to add points.<br>
+              Or type a place name / coordinates below.
+            </p>
+            <div class="route-search-row">
+              <input id="route-search-input" type="text" placeholder="Place or lat, lon" />
+              <button id="route-search-add" type="button">Add</button>
+            </div>
+            <ul id="route-wp-list"></ul>
+            <div class="route-btns">
+              <button id="route-clear" type="button" hidden>Clear</button>
+              <button id="route-gpx"   type="button" hidden>Export GPX ↓</button>
+            </div>
+            <p id="route-error"  class="error"       hidden></p>
+            <p id="route-status" class="route-status" hidden></p>
           </div>
-          <div class="route-btns">
-            <button id="route-add-via" type="button">+ Via</button>
-            <button id="route-go"      type="button">Find route</button>
-            <button id="route-clear"   type="button" hidden>Clear</button>
-          </div>
-          <p id="route-error"  class="error"  hidden></p>
-          <p id="route-status" class="route-status" hidden></p>
-          <button id="route-gpx" type="button" hidden>Export as GPX ↓</button>
-        </section>
+        </details>
 
+        <!-- Layers -->
+        <details class="block">
+          <summary>Layers</summary>
+          <div class="block-body">
+            <label><input type="checkbox" id="toggle-toll"     checked /> Toll roads (cars)</label>
+            <label><input type="checkbox" id="toggle-chains"   checked /> Snow chains required</label>
+            <label><input type="checkbox" id="toggle-ferry"    checked /> Car ferries</label>
+            <label><input type="checkbox" id="toggle-lez"      checked /> Low emission zones</label>
+            <label><input type="checkbox" id="toggle-seasonal" checked /> Seasonal closures</label>
+          </div>
+        </details>
+
+        <!-- Legend -->
+        <details class="block">
+          <summary>Legend</summary>
+          <div class="block-body">
+            <ul class="legend">
+              <li><span class="sw sw-toll-yes"></span> Toll: yes</li>
+              <li><span class="sw sw-toll-point"></span> Toll booth / gantry</li>
+              <li><span class="sw sw-chains-yes"></span> Snow chains may be required</li>
+              <li><span class="sw sw-ferry"></span> Car ferry</li>
+              <li><span class="sw sw-lez"></span> Low emission zone</li>
+              <li><span class="sw sw-seasonal-closure"></span> Winter closure (mountain pass)</li>
+              <li><span class="sw sw-seasonal-winter"></span> Winter-only road (e.g. ice road)</li>
+            </ul>
+            <p class="hint">
+              Click a line/zone for details — status, affected months, source links.
+            </p>
+          </div>
+        </details>
+
+        <!-- Map style -->
+        <details class="block">
+          <summary>Map style</summary>
+          <div class="block-body">
+            <select id="style-select">
+              <option value="https://tiles.openfreemap.org/styles/liberty" selected>Detailed (Liberty)</option>
+              <option value="https://tiles.openfreemap.org/styles/positron">Light (Positron)</option>
+              <option value="https://tiles.openfreemap.org/styles/bright">Bright</option>
+            </select>
+          </div>
+        </details>
+
+        <!-- Search by coordinates -->
+        <details class="block">
+          <summary>Search by coordinates</summary>
+          <div class="block-body">
+            <form id="coord-form">
+              <input id="coord-input" type="text" placeholder="47.4979, 19.0402" />
+              <button type="submit">Go</button>
+            </form>
+            <p id="coord-error" class="error" hidden></p>
+          </div>
+        </details>
+
+        <!-- Share + cursor (always visible, no collapse) -->
         <section class="block">
           <button id="share-link" type="button">Copy shareable link</button>
           <p id="cursor-coords" class="cursor"></p>

@@ -267,6 +267,7 @@ function showCtxMenu(lngLat: maplibregl.LngLat, x: number, y: number) {
 function hideCtxMenu() { ctxMenu.hidden = true; }
 
 map.on("contextmenu", (e) => {
+  e.preventDefault(); // suppress browser native right-click menu
   showCtxMenu(e.lngLat, e.originalEvent.clientX, e.originalEvent.clientY);
 });
 map.on("click", () => hideCtxMenu());

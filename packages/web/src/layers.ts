@@ -46,6 +46,27 @@ export const overlayLayers: LayerSpecification[] = [
     },
   },
 
+  // ── Route (drawn BELOW restriction lines so toll/chains stay visible) ─────
+  // Source "route" is registered as an empty GeoJSON in addOverlay() and
+  // updated via setData() when a route is calculated.
+
+  {
+    id: "route-casing",
+    type: "line" as const,
+    source: "route",
+    paint: { "line-color": "#fff", "line-width": 8, "line-opacity": 0.75 },
+  },
+  {
+    id: "route-line",
+    type: "line" as const,
+    source: "route",
+    paint: {
+      "line-color": "#e65100",
+      "line-width": 4,
+      "line-opacity": 0.85,
+    },
+  },
+
   // ── Invisible wide hit-areas for easy clicking (esp. on mobile) ──────────
 
   {
