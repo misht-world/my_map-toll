@@ -562,7 +562,12 @@ async function rebuildRoute() {
   summaryEl.innerHTML = "";
   map.once("idle", () => {
     const summary = analyzeRoute(map, coords);
-    renderSummary(summary, summaryEl);
+    renderSummary(summary, summaryEl, (bbox) => {
+      map.fitBounds(
+        [[bbox[0], bbox[1]], [bbox[2], bbox[3]]],
+        { padding: 80, maxZoom: 14 },
+      );
+    });
   });
 }
 

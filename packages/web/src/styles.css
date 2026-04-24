@@ -552,6 +552,22 @@ details.block > .block-body { padding-top: 6px; }
 .rs-text { flex: 1; }
 .rs-sub  { color: var(--muted); font-size: 11px; }
 
+/* Clickable count link inside summary rows (e.g. "53 segments") */
+.rs-count-link {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-size: inherit;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+}
+.rs-count-link:hover { text-decoration-style: solid; }
+
 /* ── Mobile ─────────────────────────────────────────────────── */
 
 @media (max-width: 600px) {

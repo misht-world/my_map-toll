@@ -67,7 +67,27 @@ function routeBbox(coords: [number, number][]): [number, number, number, number]
   return [w, s, e, n];
 }
 
+/** Grow a bbox to include a point. */
+function expandBbox(
+  bbox: [number, number, number, number] | null,
+  lon: number,
+  lat: number,
+): [number, number, number, number] {
+  if (!bbox) return [lon, lat, lon, lat];
+  return [
+    Math.min(bbox[0], lon), Math.min(bbox[1], lat),
+    Math.max(bbox[2], lon), Math.max(bbox[3], lat),
+  ];
+}
+
 // ── Public API ───────────────────────────────────────────────────────────────
+
+/** Per-category statistics with a bounding box for "zoom to" functionality. */
+export interface CategoryStats {
+  count: number;
+  /** Bounding box of all matching features; null when count === 0. */
+  bbox: [number, number, number, number] | null;
+}
 
 export interface RouteSummary {
   /** Countries the route passes through, enriched with toll/vignette metadata. */
@@ -81,13 +101,13 @@ export interface RouteSummary {
     /** True when PMTiles found actual tagged toll features on this route. */
     tollConfirmed: boolean;
   }>;
-  tollSegments:   number;   // tagged toll road segments
-  tollPoints:     number;   // toll booth / gantry nodes
-  chainSegments:  number;
-  ferrySegments:  number;
-  lezCount:       number;
-  winterClosures: number;
-  winterOnlyRoads: number;
+  tollSegments:   CategoryStats;
+  tollPoints:     CategoryStats;
+  chains:         CategoryStats;
+  ferry:          CategoryStats;
+  lez:            CategoryStats;
+  winterClosures: CategoryStats;
+  winterOnlyRoads: CategoryStats;
 }
 
 export function analyzeRoute(map: MLMap, routeCoords: [number, number][]): RouteSummary {
@@ -99,7 +119,6 @@ export function analyzeRoute(map: MLMap, routeCoords: [number, number][]): Route
   // Deduplicate: same OSM feature can appear in multiple tiles.
   const seen = new Set<string>();
   const features = raw.filter((f) => {
-    // Use OSM id + geometry type as dedup key; fall back to first coord string.
     const coords = flatCoords(f.geometry);
     const key = `${f.id ?? "?"}_${f.geometry.type}_${coords[0]?.join(",")}`;
     if (seen.has(key)) return false;
@@ -108,8 +127,22 @@ export function analyzeRoute(map: MLMap, routeCoords: [number, number][]): Route
   });
 
   // ── Count restriction types on the route ─────────────────────────────────
-  let tollSegments = 0, tollPoints = 0, chainSegments = 0,
-      ferrySegments = 0, lezCount = 0, winterClosures = 0, winterOnlyRoads = 0;
+  function emptyStats(): CategoryStats { return { count: 0, bbox: null }; }
+
+  const tollSegments   = emptyStats();
+  const tollPoints     = emptyStats();
+  const chains         = emptyStats();
+  const ferry          = emptyStats();
+  const lez            = emptyStats();
+  const winterClosures = emptyStats();
+  const winterOnlyRoads = emptyStats();
+
+  function accumulate(stats: CategoryStats, coords: [number, number][]) {
+    stats.count++;
+    for (const [lon, lat] of coords) {
+      stats.bbox = expandBbox(stats.bbox, lon, lat);
+    }
+  }
 
   for (const f of features) {
     const props  = f.properties as TileProperties;
@@ -117,15 +150,15 @@ export function analyzeRoute(map: MLMap, routeCoords: [number, number][]): Route
     if (coords.length === 0) continue;
     if (!isNearRoute(coords, routeCoords, bbox)) continue;
 
-    if (props.kind === "toll_point") { tollPoints++;  continue; }
-    if (props.kind === "lez")        { lezCount++;    continue; }
-    if (props.toll_status === "explicit_yes" && !props.ferry_car)  tollSegments++;
+    if (props.kind === "toll_point") { accumulate(tollPoints, coords); continue; }
+    if (props.kind === "lez")        { accumulate(lez, coords);        continue; }
+    if (props.toll_status === "explicit_yes" && !props.ferry_car)  accumulate(tollSegments, coords);
     if (props.chains_status === "explicit" ||
         props.chains_status === "conditional" ||
-        props.chains_status === "ambiguous")                        chainSegments++;
-    if (props.ferry_car)                                            ferrySegments++;
-    if (props.seasonal_status === "winter_closure")                 winterClosures++;
-    if (props.seasonal_status === "winter_only_road")               winterOnlyRoads++;
+        props.chains_status === "ambiguous")                        accumulate(chains, coords);
+    if (props.ferry_car)                                            accumulate(ferry, coords);
+    if (props.seasonal_status === "winter_closure")                 accumulate(winterClosures, coords);
+    if (props.seasonal_status === "winter_only_road")               accumulate(winterOnlyRoads, coords);
   }
 
   // ── Detect countries (sample route points, check against bbox table) ──────
@@ -140,10 +173,11 @@ export function analyzeRoute(map: MLMap, routeCoords: [number, number][]): Route
     }
   }
 
+  const anyTollFound = tollSegments.count > 0 || tollPoints.count > 0;
+
   // Build country list:
   // • Vignette countries: always shown when on route.
-  // • Non-vignette toll countries: shown only when PMTiles found toll features
-  //   (avoids spurious entries when route merely clips a country corner).
+  // • Non-vignette toll countries: shown only when PMTiles found toll features.
   const countries = [...detected]
     .map((code) => {
       const info = COUNTRY_TOLL_INFO[code]!;
@@ -154,25 +188,36 @@ export function analyzeRoute(map: MLMap, routeCoords: [number, number][]): Route
         vignetteNote: info.vignetteNote,
         hasTolls: info.hasTolls,
         extraTollNote: info.extraTollNote,
-        tollConfirmed: tollSegments > 0 || tollPoints > 0,
+        tollConfirmed: anyTollFound,
       };
     })
     .filter((c) => c.vignette || (c.hasTolls && c.tollConfirmed));
 
-  return { countries, tollSegments, tollPoints, chainSegments, ferrySegments, lezCount, winterClosures, winterOnlyRoads };
+  return { countries, tollSegments, tollPoints, chains, ferry, lez, winterClosures, winterOnlyRoads };
 }
 
 // ── DOM renderer ─────────────────────────────────────────────────────────────
 
-export function renderSummary(summary: RouteSummary, container: HTMLElement): void {
+/**
+ * Render the route summary into `container`.
+ * @param onFlyTo  Called when the user clicks a count link; receives the
+ *                 bounding box of the matching features so the caller can
+ *                 `map.fitBounds(bbox, { padding: 80 })`.
+ */
+export function renderSummary(
+  summary: RouteSummary,
+  container: HTMLElement,
+  onFlyTo?: (bbox: [number, number, number, number]) => void,
+): void {
   container.innerHTML = "";
 
-  const { countries, tollSegments, tollPoints, chainSegments,
-          ferrySegments, lezCount, winterClosures, winterOnlyRoads } = summary;
+  const { countries, tollSegments, tollPoints, chains,
+          ferry, lez, winterClosures, winterOnlyRoads } = summary;
 
-  const hasAnything = countries.length > 0 || tollSegments > 0 || tollPoints > 0 ||
-    chainSegments > 0 || ferrySegments > 0 || lezCount > 0 ||
-    winterClosures > 0 || winterOnlyRoads > 0;
+  const hasAnything = countries.length > 0 ||
+    tollSegments.count > 0 || tollPoints.count > 0 ||
+    chains.count > 0 || ferry.count > 0 || lez.count > 0 ||
+    winterClosures.count > 0 || winterOnlyRoads.count > 0;
 
   if (!hasAnything) {
     container.hidden = true;
@@ -182,6 +227,7 @@ export function renderSummary(summary: RouteSummary, container: HTMLElement): vo
   const root = document.createElement("div");
   root.className = "route-summary";
 
+  /** Plain-text row with icon. */
   function row(icon: string, text: string, sub?: string): HTMLElement {
     const div = document.createElement("div");
     div.className = "rs-row";
@@ -189,52 +235,125 @@ export function renderSummary(summary: RouteSummary, container: HTMLElement): vo
     return div;
   }
 
+  /**
+   * Row where `count` is a clickable button that flies to the feature bbox.
+   * Falls back to plain text if no bbox is available or no onFlyTo provided.
+   */
+  function countRow(
+    icon: string,
+    stats: CategoryStats,
+    label: (n: number) => string,
+    sub?: string,
+  ): HTMLElement {
+    const div = document.createElement("div");
+    div.className = "rs-row";
+
+    const iconEl = document.createElement("span");
+    iconEl.className = "rs-icon";
+    iconEl.textContent = icon;
+
+    const textEl = document.createElement("span");
+    textEl.className = "rs-text";
+
+    if (onFlyTo && stats.bbox) {
+      const btn = document.createElement("button");
+      btn.className = "rs-count-link";
+      btn.textContent = label(stats.count);
+      const captureBbox = stats.bbox;
+      btn.addEventListener("click", () => onFlyTo(captureBbox));
+      textEl.appendChild(btn);
+    } else {
+      textEl.appendChild(document.createTextNode(label(stats.count)));
+    }
+
+    if (sub) {
+      const subEl = document.createElement("br");
+      textEl.appendChild(subEl);
+      const subSpan = document.createElement("span");
+      subSpan.className = "rs-sub";
+      subSpan.textContent = sub;
+      textEl.appendChild(subSpan);
+    }
+
+    div.append(iconEl, textEl);
+    return div;
+  }
+
   // ── Country / payment section ─────────────────────────────────────────────
   if (countries.length > 0) {
     const hdr = document.createElement("div");
     hdr.className = "rs-header";
-    hdr.textContent = "Расходы на дороге";
+    hdr.textContent = "Road costs";
     root.appendChild(hdr);
 
     for (const c of countries) {
       if (c.vignette) {
-        // Vignette country — always show
         let sub = c.vignetteNote ?? "";
         if (c.tollConfirmed && c.hasTolls && c.extraTollNote) {
-          // PMTiles also found toll features AND country is known to have extra tolls
           sub += (sub ? " · " : "") + `⚠️ ${c.extraTollNote}`;
         } else if (c.tollConfirmed && c.hasTolls) {
-          sub += (sub ? " · " : "") + "⚠️ Возможны платные участки вне виньетки";
+          sub += (sub ? " · " : "") + "⚠️ Additional tolls possible outside vignette";
         }
-        root.appendChild(row("🎫", `<b>${c.name}</b> — виньетка обязательна`, sub || undefined));
+        root.appendChild(row("🎫", `<b>${c.name}</b> — vignette required`, sub || undefined));
       } else {
-        // Non-vignette toll country — shown because PMTiles confirmed toll roads
-        root.appendChild(row("💰", `<b>${c.name}</b> — платные дороги`));
+        root.appendChild(row("💰", `<b>${c.name}</b> — toll roads`));
       }
     }
   }
 
   // ── Road conditions section ───────────────────────────────────────────────
   const conditions: HTMLElement[] = [];
-  if (chainSegments > 0)
-    conditions.push(row("⛓️", `Цепи: ${chainSegments} уч.`, "Возможно обязательны или рекомендованы"));
-  if (ferrySegments > 0)
-    conditions.push(row("⛴️", `Паром: ${ferrySegments} переправа${ferrySegments > 1 ? "ы" : ""}`));
-  if (lezCount > 0)
-    conditions.push(row("🌿", `Зона низких выбросов: ${lezCount}`));
-  if (winterClosures > 0)
-    conditions.push(row("❄️", `Зимнее закрытие: ${winterClosures} уч.`, "Перевал может быть закрыт зимой"));
-  if (winterOnlyRoads > 0)
-    conditions.push(row("🧊", `Зимняя дорога (лёд): ${winterOnlyRoads} уч.`));
+
+  if (chains.count > 0)
+    conditions.push(countRow(
+      "⛓️",
+      chains,
+      n => `Snow chains: ${n} segment${n > 1 ? "s" : ""}`,
+      "May be required or recommended",
+    ));
+
+  if (ferry.count > 0)
+    conditions.push(countRow(
+      "⛴️",
+      ferry,
+      n => `Car ferry: ${n} crossing${n > 1 ? "s" : ""}`,
+    ));
+
+  if (lez.count > 0)
+    conditions.push(countRow(
+      "🌿",
+      lez,
+      n => `Low emission zone${n > 1 ? `s: ${n}` : ""}`,
+    ));
+
+  if (winterClosures.count > 0)
+    conditions.push(countRow(
+      "❄️",
+      winterClosures,
+      n => `Winter closure: ${n} segment${n > 1 ? "s" : ""}`,
+      "Mountain passes may be closed in winter",
+    ));
+
+  if (winterOnlyRoads.count > 0)
+    conditions.push(countRow(
+      "🧊",
+      winterOnlyRoads,
+      n => `Winter-only road (ice): ${n} segment${n > 1 ? "s" : ""}`,
+    ));
+
   // Mention toll booths only if no country-level toll info was shown
-  if (tollPoints > 0 && countries.length === 0)
-    conditions.push(row("💰", `Пункты оплаты: ${tollPoints}`));
+  if (tollPoints.count > 0 && countries.length === 0)
+    conditions.push(countRow(
+      "💰",
+      tollPoints,
+      n => `Toll booth${n > 1 ? `s: ${n}` : ""}`,
+    ));
 
   if (conditions.length > 0) {
     if (countries.length > 0) {
       const hdr = document.createElement("div");
       hdr.className = "rs-header";
-      hdr.textContent = "Условия на дороге";
+      hdr.textContent = "Road conditions";
       root.appendChild(hdr);
     }
     for (const c of conditions) root.appendChild(c);
