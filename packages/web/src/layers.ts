@@ -50,11 +50,17 @@ export const overlayLayers: LayerSpecification[] = [
   // Source "route" is registered as an empty GeoJSON in addOverlay() and
   // updated via setData() when a route is calculated.
 
+  // Route casing is intentionally wider than the widest restriction line
+  // (5 px at zoom 12) so the white border always peeks out on both sides.
   {
     id: "route-casing",
     type: "line" as const,
     source: "route",
-    paint: { "line-color": "#fff", "line-width": 8, "line-opacity": 0.75 },
+    paint: {
+      "line-color": "#fff",
+      "line-width": ["interpolate", ["linear"], ["zoom"], 5, 9, 12, 16],
+      "line-opacity": 0.8,
+    },
   },
   {
     id: "route-line",
@@ -62,8 +68,8 @@ export const overlayLayers: LayerSpecification[] = [
     source: "route",
     paint: {
       "line-color": "#e65100",
-      "line-width": 4,
-      "line-opacity": 0.85,
+      "line-width": ["interpolate", ["linear"], ["zoom"], 5, 4, 12, 8],
+      "line-opacity": 0.9,
     },
   },
 
