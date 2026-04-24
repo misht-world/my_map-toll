@@ -395,6 +395,25 @@ details.block > .block-body { padding-top: 6px; }
 }
 #route-gpx:hover { border-color: var(--accent); color: var(--accent); }
 
+/* ── Custom map markers ─────────────────────────────────────── */
+
+.route-wp-marker {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2.5px solid #fff;
+  box-shadow: 0 1px 5px rgba(0,0,0,0.45);
+  cursor: grab;
+}
+.route-wp-marker--start { background: #2e7d32; }
+.route-wp-marker--end   { background: #c62828; }
+.route-wp-marker--via   {
+  background: #e65100;
+  width: 10px;
+  height: 10px;
+  border-width: 2px;
+}
+
 /* ── Waypoint list ──────────────────────────────────────────── */
 
 #route-wp-list {
@@ -408,7 +427,20 @@ details.block > .block-body { padding-top: 6px; }
   gap: 6px;
   padding: 3px 0;
   font-size: 12px;
+  border-top: 2px solid transparent; /* placeholder for drag-over indicator */
 }
+.route-wp-item.dragging  { opacity: 0.35; }
+.route-wp-item.drag-over { border-top-color: var(--accent); }
+.route-wp-handle {
+  flex-shrink: 0;
+  cursor: grab;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  user-select: none;
+  padding: 0 1px;
+}
+.route-wp-handle:active { cursor: grabbing; }
 .route-wp-label {
   flex-shrink: 0;
   width: 18px;
@@ -422,6 +454,9 @@ details.block > .block-body { padding-top: 6px; }
   align-items: center;
   justify-content: center;
 }
+.route-wp-label--start { background: #2e7d32; }
+.route-wp-label--end   { background: #c62828; }
+.route-wp-label--via   { background: #e65100; }
 .route-wp-coords {
   flex: 1;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;

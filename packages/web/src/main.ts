@@ -303,7 +303,8 @@ ctxMenu.addEventListener("click", async (e) => {
   const ll = ctxLngLat;
   if (action === "start") addWp(ll, 0);
   else if (action === "end") addWp(ll, wps.length);
-  else if (action === "via") addWp(ll);
+  // "Via" inserts before the current last point so it becomes a true middle stop
+  else if (action === "via") addWp(ll, wps.length >= 2 ? wps.length - 1 : wps.length);
 });
 
 // ---------------------------------------------------------------------------
@@ -384,7 +385,7 @@ panelToggle.addEventListener("click", () => {
 // ---------------------------------------------------------------------------
 // Route planner — waypoint-based (up to 20 points, draggable markers)
 // ---------------------------------------------------------------------------
-interface WayPoint { lngLat: maplibregl.LngLat; marker: maplibregl.Marker; }
+interface WayPoint { lngLat: maplibregl.LngLat; marker: maplibregl.Marker; el: HTMLElement; }
 const MAX_WP = 20;
 const WP_LABELS = "ABCDEFGHIJKLMNOPQRST";
 const wps: WayPoint[] = [];
@@ -399,16 +400,37 @@ const wpListEl      = document.getElementById("route-wp-list")      as HTMLEleme
 
 let routeGeometry: GeoJSON.LineString | null = null;
 
+type WpRole = "start" | "via" | "end";
+function wpRole(i: number): WpRole {
+  if (wps.length <= 1) return i === 0 ? "start" : "via";
+  return i === 0 ? "start" : i === wps.length - 1 ? "end" : "via";
+}
+
+function makeWpEl(): HTMLElement {
+  const el = document.createElement("div");
+  el.className = "route-wp-marker route-wp-marker--via";
+  return el;
+}
+
+/** Update every marker's CSS class to reflect its current role. */
+function relabelMarkers() {
+  wps.forEach((wp, i) => {
+    wp.el.className = `route-wp-marker route-wp-marker--${wpRole(i)}`;
+  });
+}
+
 function addWp(lngLat: maplibregl.LngLat, idx?: number) {
   if (wps.length >= MAX_WP) return;
   const insertAt = idx !== undefined ? Math.max(0, Math.min(idx, wps.length)) : wps.length;
-  const marker = new maplibregl.Marker({ draggable: true, color: "#e65100" })
+  const el = makeWpEl();
+  const marker = new maplibregl.Marker({ element: el, draggable: true })
     .setLngLat(lngLat).addTo(map);
   marker.on("dragend", () => {
     const wp = wps.find(w => w.marker === marker);
     if (wp) { wp.lngLat = marker.getLngLat(); void rebuildRoute(); }
   });
-  wps.splice(insertAt, 0, { lngLat, marker });
+  wps.splice(insertAt, 0, { lngLat, marker, el });
+  relabelMarkers();
   renderWpList();
   void rebuildRoute();
 }
@@ -417,6 +439,7 @@ function removeWp(idx: number) {
   if (idx < 0 || idx >= wps.length) return;
   wps[idx]!.marker.remove();
   wps.splice(idx, 1);
+  relabelMarkers();
   renderWpList();
   void rebuildRoute();
 }
@@ -426,18 +449,55 @@ function renderWpList() {
   wps.forEach((wp, i) => {
     const li = document.createElement("li");
     li.className = "route-wp-item";
+    li.draggable = true;
+
+    const handle = document.createElement("span");
+    handle.className = "route-wp-handle";
+    handle.textContent = "⠿";
+    handle.title = "Drag to reorder";
+
     const label = document.createElement("span");
-    label.className = "route-wp-label";
+    label.className = `route-wp-label route-wp-label--${wpRole(i)}`;
     label.textContent = WP_LABELS[i] ?? String(i + 1);
+
     const coords = document.createElement("span");
     coords.className = "route-wp-coords";
     coords.textContent = `${wp.lngLat.lat.toFixed(4)}, ${wp.lngLat.lng.toFixed(4)}`;
+
     const rm = document.createElement("button");
     rm.className = "route-wp-rm";
     rm.textContent = "✕";
     rm.title = "Remove waypoint";
     rm.addEventListener("click", () => removeWp(i));
-    li.append(label, coords, rm);
+
+    // ── HTML5 drag-and-drop reordering ──────────────────────────────────────
+    li.addEventListener("dragstart", (e) => {
+      e.dataTransfer!.effectAllowed = "move";
+      e.dataTransfer!.setData("text/plain", String(i));
+      // Defer adding class so the drag image is captured first
+      requestAnimationFrame(() => li.classList.add("dragging"));
+    });
+    li.addEventListener("dragend", () => li.classList.remove("dragging"));
+    li.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      e.dataTransfer!.dropEffect = "move";
+      li.classList.add("drag-over");
+    });
+    li.addEventListener("dragleave", () => li.classList.remove("drag-over"));
+    li.addEventListener("drop", (e) => {
+      e.preventDefault();
+      li.classList.remove("drag-over");
+      const fromIdx = parseInt(e.dataTransfer!.getData("text/plain"), 10);
+      if (isNaN(fromIdx) || fromIdx === i) return;
+      const [moved] = wps.splice(fromIdx, 1);
+      // After splicing out fromIdx the target slot shifts if fromIdx < i
+      wps.splice(fromIdx < i ? i - 1 : i, 0, moved!);
+      relabelMarkers();
+      renderWpList();
+      void rebuildRoute();
+    });
+
+    li.append(handle, label, coords, rm);
     wpListEl.appendChild(li);
   });
   routeClearBtn.hidden = wps.length === 0;
