@@ -524,6 +524,34 @@ details.block > .block-body { padding-top: 6px; }
 }
 .route-search-row button:hover { border-color: var(--accent); color: var(--accent); }
 
+/* ── Route summary ──────────────────────────────────────────── */
+
+#route-summary { margin-top: 8px; }
+
+.route-summary {
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+  font-size: 12px;
+}
+.rs-header {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin: 6px 0 3px;
+}
+.rs-header:first-child { margin-top: 0; }
+.rs-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 3px 0;
+  line-height: 1.4;
+}
+.rs-icon { flex-shrink: 0; font-size: 13px; line-height: 1.3; }
+.rs-text { flex: 1; }
+.rs-sub  { color: var(--muted); font-size: 11px; }
+
 /* ── Mobile ─────────────────────────────────────────────────── */
 
 @media (max-width: 600px) {

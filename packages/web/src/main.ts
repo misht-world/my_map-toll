@@ -8,6 +8,7 @@ import { parseCoords } from "./search.js";
 import { parseHash, formatHash, type UrlState } from "./url-state.js";
 import { renderPopup } from "./popup.js";
 import { geocode, fetchRoute, fmtDistance, fmtDuration, toGpx } from "./routing.js";
+import { analyzeRoute, renderSummary } from "./route-summary.js";
 
 // ---------------------------------------------------------------------------
 // PMTiles protocol
@@ -405,6 +406,7 @@ const routeClearBtn = document.getElementById("route-clear")  as HTMLButtonEleme
 const srchInput     = document.getElementById("route-search-input") as HTMLInputElement;
 const srchAddBtn    = document.getElementById("route-search-add")   as HTMLButtonElement;
 const wpListEl      = document.getElementById("route-wp-list")      as HTMLElement;
+const summaryEl     = document.getElementById("route-summary")      as HTMLElement;
 
 let routeGeometry: GeoJSON.LineString | null = null;
 
@@ -553,6 +555,15 @@ async function rebuildRoute() {
     [[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]],
     { padding: 60, maxZoom: 14 },
   );
+
+  // After fitBounds the map loads tiles for the full route extent.
+  // Wait for "idle" (all tiles rendered) then run the restriction analysis.
+  summaryEl.hidden = true;
+  summaryEl.innerHTML = "";
+  map.once("idle", () => {
+    const summary = analyzeRoute(map, coords);
+    renderSummary(summary, summaryEl);
+  });
 }
 
 function clearAllRoute() {
@@ -565,6 +576,8 @@ function clearAllRoute() {
   routeGpxBtn.hidden = true;
   routeErrorEl.hidden = true;
   routeStatusEl.hidden = true;
+  summaryEl.hidden = true;
+  summaryEl.innerHTML = "";
 }
 
 routeClearBtn.addEventListener("click", clearAllRoute);
