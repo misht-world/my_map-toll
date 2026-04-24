@@ -57,7 +57,7 @@ export const overlayLayers: LayerSpecification[] = [
     type: "line" as const,
     source: "route",
     paint: {
-      "line-color": "#fff",
+      "line-color": "#ffe066",
       "line-width": ["interpolate", ["linear"], ["zoom"], 5, 9, 12, 16],
       "line-opacity": 0.8,
     },
