@@ -412,10 +412,13 @@ function makeWpEl(): HTMLElement {
   return el;
 }
 
-/** Update every marker's CSS class to reflect its current role. */
+/** Update every marker's CSS class + label to reflect its current role. */
 function relabelMarkers() {
   wps.forEach((wp, i) => {
-    wp.el.className = `route-wp-marker route-wp-marker--${wpRole(i)}`;
+    const role = wpRole(i);
+    wp.el.className = `route-wp-marker route-wp-marker--${role}`;
+    // Show "S" / "F" inside start/end circles so they're instantly distinguishable.
+    wp.el.textContent = role === "start" ? "S" : role === "end" ? "F" : "";
   });
 }
 
@@ -423,7 +426,9 @@ function addWp(lngLat: maplibregl.LngLat, idx?: number) {
   if (wps.length >= MAX_WP) return;
   const insertAt = idx !== undefined ? Math.max(0, Math.min(idx, wps.length)) : wps.length;
   const el = makeWpEl();
-  const marker = new maplibregl.Marker({ element: el, draggable: true })
+  // anchor:"center" keeps the circle visually centred on the coordinate at all zoom levels.
+  // The default "bottom" is correct for pin-shaped markers but wrong for circles.
+  const marker = new maplibregl.Marker({ element: el, draggable: true, anchor: "center" })
     .setLngLat(lngLat).addTo(map);
   marker.on("dragend", () => {
     const wp = wps.find(w => w.marker === marker);

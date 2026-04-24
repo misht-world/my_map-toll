@@ -398,21 +398,26 @@ details.block > .block-body { padding-top: 6px; }
 /* ── Custom map markers ─────────────────────────────────────── */
 
 .route-wp-marker {
-  width: 14px;
-  height: 14px;
   border-radius: 50%;
   border: 2.5px solid #fff;
-  box-shadow: 0 1px 5px rgba(0,0,0,0.45);
+  box-shadow: 0 1px 6px rgba(0,0,0,0.5);
   cursor: grab;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 800;
+  font-size: 8px;
+  line-height: 1;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  user-select: none;
 }
-.route-wp-marker--start { background: #2e7d32; }
-.route-wp-marker--end   { background: #c62828; }
-.route-wp-marker--via   {
-  background: #e65100;
-  width: 10px;
-  height: 10px;
-  border-width: 2px;
-}
+/* Start = green, 20 px, letter "S" */
+.route-wp-marker--start { background: #2e7d32; width: 20px; height: 20px; }
+/* End   = red,   20 px, letter "F" (finish) */
+.route-wp-marker--end   { background: #c62828; width: 20px; height: 20px; }
+/* Via   = orange, 11 px, no text */
+.route-wp-marker--via   { background: #e65100; width: 11px; height: 11px; border-width: 2px; }
 
 /* ── Waypoint list ──────────────────────────────────────────── */
 
