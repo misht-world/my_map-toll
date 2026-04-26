@@ -38,6 +38,11 @@ osmium tags-filter --overwrite -o "$OUT" "$IN" \
   w/access:conditional \
   w/motorcar:conditional \
   r/route=ferry \
+  r/route=shuttle_train \
+  w/service=car_shuttle \
+  r/service=car_shuttle \
+  w/public_transport:type=car_shuttle \
+  r/public_transport:type=car_shuttle \
   r/boundary=low_emission_zone \
   w/boundary=low_emission_zone \
   r/low_emission_zone=yes \

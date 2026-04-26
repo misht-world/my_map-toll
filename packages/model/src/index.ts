@@ -136,6 +136,8 @@ export interface TileProperties {
   name?: string;
   /** True for car-capable ferries. */
   ferry_car?: boolean;
+  /** True for car-shuttle trains / tunnels (e.g. Eurotunnel, ROLA, Autozug). */
+  car_shuttle?: boolean;
 }
 
 export type OsmTags = Readonly<Record<string, string>>;

@@ -153,7 +153,8 @@ details.block > .block-body { padding-top: 6px; }
 .sw-chains-yes  { background: var(--chains-yes); }
 .sw-chains-cond { background: var(--chains-cond); }
 .sw-chains-amb  { background: var(--chains-amb); border: 1px dashed #555; }
-.sw-ferry       { background: var(--ferry); border: 2px dashed var(--ferry); }
+.sw-ferry        { background: var(--ferry); border: 2px dashed var(--ferry); }
+.sw-car-shuttle  { background: #7b1fa2; border: 2px dashed #7b1fa2; }
 .sw-lez {
   background:
     repeating-linear-gradient(

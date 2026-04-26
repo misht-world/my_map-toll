@@ -3,7 +3,7 @@ import { Protocol } from "pmtiles";
 import type { TileProperties } from "@mmt/model";
 
 import { config } from "./config.js";
-import { overlayLayers, TOLL_LAYER_IDS, CHAINS_LAYER_IDS, FERRY_LAYER_IDS, LEZ_LAYER_IDS, SEASONAL_LAYER_IDS, TOLL_POINT_LAYER_IDS } from "./layers.js";
+import { overlayLayers, TOLL_LAYER_IDS, CHAINS_LAYER_IDS, FERRY_LAYER_IDS, CAR_SHUTTLE_LAYER_IDS, LEZ_LAYER_IDS, SEASONAL_LAYER_IDS, TOLL_POINT_LAYER_IDS } from "./layers.js";
 import { parseCoords } from "./search.js";
 import { parseHash, formatHash, type UrlState } from "./url-state.js";
 import { renderPopup } from "./popup.js";
@@ -23,7 +23,7 @@ const defaultState: UrlState = {
   zoom: config.defaultView.zoom,
   lat: config.defaultView.center[1],
   lon: config.defaultView.center[0],
-  layers: { toll: true, chains: true, ferry: true, lez: true, seasonal: true },
+  layers: { toll: true, chains: true, ferry: true, carShuttle: true, lez: true, seasonal: true },
 };
 const initial = parseHash(window.location.hash, defaultState);
 
@@ -34,16 +34,18 @@ const savedStyle = (() => {
   catch { return config.basemapStyleUrl; }
 })();
 
-const tollToggle   = document.getElementById("toggle-toll")   as HTMLInputElement;
-const chainsToggle = document.getElementById("toggle-chains") as HTMLInputElement;
-const ferryToggle  = document.getElementById("toggle-ferry")  as HTMLInputElement;
-const lezToggle    = document.getElementById("toggle-lez")    as HTMLInputElement;
-const seasonalToggle = document.getElementById("toggle-seasonal") as HTMLInputElement;
-tollToggle.checked     = initial.layers.toll;
-chainsToggle.checked   = initial.layers.chains;
-ferryToggle.checked    = initial.layers.ferry;
-lezToggle.checked      = initial.layers.lez;
-seasonalToggle.checked = initial.layers.seasonal;
+const tollToggle       = document.getElementById("toggle-toll")         as HTMLInputElement;
+const chainsToggle     = document.getElementById("toggle-chains")       as HTMLInputElement;
+const ferryToggle      = document.getElementById("toggle-ferry")        as HTMLInputElement;
+const carShuttleToggle = document.getElementById("toggle-car-shuttle")  as HTMLInputElement;
+const lezToggle        = document.getElementById("toggle-lez")          as HTMLInputElement;
+const seasonalToggle   = document.getElementById("toggle-seasonal")     as HTMLInputElement;
+tollToggle.checked       = initial.layers.toll;
+chainsToggle.checked     = initial.layers.chains;
+ferryToggle.checked      = initial.layers.ferry;
+carShuttleToggle.checked = initial.layers.carShuttle ?? true;
+lezToggle.checked        = initial.layers.lez;
+seasonalToggle.checked   = initial.layers.seasonal;
 
 // ---------------------------------------------------------------------------
 // Map
@@ -163,19 +165,21 @@ function applyLayerVisibility() {
   };
   // Toll booth / gantry point markers follow the Toll roads toggle —
   // they're just another signal that this road is tolled.
-  set(TOLL_LAYER_IDS,       tollToggle.checked);
-  set(TOLL_POINT_LAYER_IDS, tollToggle.checked);
-  set(CHAINS_LAYER_IDS, chainsToggle.checked);
-  set(FERRY_LAYER_IDS,  ferryToggle.checked);
-  set(LEZ_LAYER_IDS,      lezToggle.checked);
-  set(SEASONAL_LAYER_IDS, seasonalToggle.checked);
+  set(TOLL_LAYER_IDS,        tollToggle.checked);
+  set(TOLL_POINT_LAYER_IDS,  tollToggle.checked);
+  set(CHAINS_LAYER_IDS,      chainsToggle.checked);
+  set(FERRY_LAYER_IDS,       ferryToggle.checked);
+  set(CAR_SHUTTLE_LAYER_IDS, carShuttleToggle.checked);
+  set(LEZ_LAYER_IDS,         lezToggle.checked);
+  set(SEASONAL_LAYER_IDS,    seasonalToggle.checked);
   syncHash();
 }
-tollToggle.addEventListener("change",     applyLayerVisibility);
-chainsToggle.addEventListener("change",   applyLayerVisibility);
-ferryToggle.addEventListener("change",    applyLayerVisibility);
-lezToggle.addEventListener("change",      applyLayerVisibility);
-seasonalToggle.addEventListener("change", applyLayerVisibility);
+tollToggle.addEventListener("change",         applyLayerVisibility);
+chainsToggle.addEventListener("change",       applyLayerVisibility);
+ferryToggle.addEventListener("change",        applyLayerVisibility);
+carShuttleToggle.addEventListener("change",   applyLayerVisibility);
+lezToggle.addEventListener("change",          applyLayerVisibility);
+seasonalToggle.addEventListener("change",     applyLayerVisibility);
 
 // ---------------------------------------------------------------------------
 // Basemap style switcher
@@ -197,12 +201,12 @@ styleSelect.addEventListener("change", () => {
 // ---------------------------------------------------------------------------
 // Click → popup  (pass click lngLat for Google Maps link)
 // ---------------------------------------------------------------------------
-const interactiveLayers = [...TOLL_LAYER_IDS, ...CHAINS_LAYER_IDS, ...FERRY_LAYER_IDS, ...LEZ_LAYER_IDS, ...SEASONAL_LAYER_IDS, ...TOLL_POINT_LAYER_IDS]
+const interactiveLayers = [...TOLL_LAYER_IDS, ...CHAINS_LAYER_IDS, ...FERRY_LAYER_IDS, ...CAR_SHUTTLE_LAYER_IDS, ...LEZ_LAYER_IDS, ...SEASONAL_LAYER_IDS, ...TOLL_POINT_LAYER_IDS]
   .filter(id => !id.endsWith("-hitbox"));
 
 // Hitbox layers are for hit-testing, visible layers for display.
 // LEZ fill itself is a generous hit-area (whole polygon).
-const allClickLayers = [...TOLL_LAYER_IDS, ...CHAINS_LAYER_IDS, ...FERRY_LAYER_IDS, ...LEZ_LAYER_IDS, ...SEASONAL_LAYER_IDS, ...TOLL_POINT_LAYER_IDS];
+const allClickLayers = [...TOLL_LAYER_IDS, ...CHAINS_LAYER_IDS, ...FERRY_LAYER_IDS, ...CAR_SHUTTLE_LAYER_IDS, ...LEZ_LAYER_IDS, ...SEASONAL_LAYER_IDS, ...TOLL_POINT_LAYER_IDS];
 
 map.on("click", (e) => {
   const features = map.queryRenderedFeatures(e.point, { layers: allClickLayers });
@@ -318,7 +322,7 @@ function syncHash() {
     const c = map.getCenter();
     const next = formatHash({
       zoom: map.getZoom(), lat: c.lat, lon: c.lng,
-      layers: { toll: tollToggle.checked, chains: chainsToggle.checked, ferry: ferryToggle.checked, lez: lezToggle.checked, seasonal: seasonalToggle.checked },
+      layers: { toll: tollToggle.checked, chains: chainsToggle.checked, ferry: ferryToggle.checked, carShuttle: carShuttleToggle.checked, lez: lezToggle.checked, seasonal: seasonalToggle.checked },
     });
     if (next !== window.location.hash) history.replaceState(null, "", next);
   }, 200);
@@ -329,11 +333,12 @@ map.on("zoomend",  syncHash);
 window.addEventListener("hashchange", () => {
   const s = parseHash(window.location.hash, defaultState);
   map.jumpTo({ center: [s.lon, s.lat], zoom: s.zoom });
-  tollToggle.checked     = s.layers.toll;
-  chainsToggle.checked   = s.layers.chains;
-  ferryToggle.checked    = s.layers.ferry;
-  lezToggle.checked      = s.layers.lez;
-  seasonalToggle.checked = s.layers.seasonal;
+  tollToggle.checked       = s.layers.toll;
+  chainsToggle.checked     = s.layers.chains;
+  ferryToggle.checked      = s.layers.ferry;
+  carShuttleToggle.checked = s.layers.carShuttle;
+  lezToggle.checked        = s.layers.lez;
+  seasonalToggle.checked   = s.layers.seasonal;
   applyLayerVisibility();
 });
 
@@ -346,7 +351,7 @@ shareBtn.addEventListener("click", async () => {
   const c = map.getCenter();
   const hash = formatHash({
     zoom: map.getZoom(), lat: c.lat, lon: c.lng,
-    layers: { toll: tollToggle.checked, chains: chainsToggle.checked, ferry: ferryToggle.checked, lez: lezToggle.checked, seasonal: seasonalToggle.checked },
+    layers: { toll: tollToggle.checked, chains: chainsToggle.checked, ferry: ferryToggle.checked, carShuttle: carShuttleToggle.checked, lez: lezToggle.checked, seasonal: seasonalToggle.checked },
   });
   const url = `${window.location.origin}${window.location.pathname}${hash}`;
   try {

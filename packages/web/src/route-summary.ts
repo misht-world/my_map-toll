@@ -105,6 +105,7 @@ export interface RouteSummary {
   tollPoints:     CategoryStats;
   chains:         CategoryStats;
   ferry:          CategoryStats;
+  carShuttle:     CategoryStats;
   lez:            CategoryStats;
   winterClosures: CategoryStats;
   winterOnlyRoads: CategoryStats;
@@ -129,12 +130,13 @@ export function analyzeRoute(map: MLMap, routeCoords: [number, number][]): Route
   // ── Count restriction types on the route ─────────────────────────────────
   function emptyStats(): CategoryStats { return { count: 0, bbox: null }; }
 
-  const tollSegments   = emptyStats();
-  const tollPoints     = emptyStats();
-  const chains         = emptyStats();
-  const ferry          = emptyStats();
-  const lez            = emptyStats();
-  const winterClosures = emptyStats();
+  const tollSegments    = emptyStats();
+  const tollPoints      = emptyStats();
+  const chains          = emptyStats();
+  const ferry           = emptyStats();
+  const carShuttle      = emptyStats();
+  const lez             = emptyStats();
+  const winterClosures  = emptyStats();
   const winterOnlyRoads = emptyStats();
 
   function accumulate(stats: CategoryStats, coords: [number, number][]) {
@@ -152,11 +154,13 @@ export function analyzeRoute(map: MLMap, routeCoords: [number, number][]): Route
 
     if (props.kind === "toll_point") { accumulate(tollPoints, coords); continue; }
     if (props.kind === "lez")        { accumulate(lez, coords);        continue; }
-    if (props.toll_status === "explicit_yes" && !props.ferry_car)  accumulate(tollSegments, coords);
+    if (props.toll_status === "explicit_yes" && !props.ferry_car && !props.car_shuttle)
+                                                                    accumulate(tollSegments, coords);
     if (props.chains_status === "explicit" ||
         props.chains_status === "conditional" ||
         props.chains_status === "ambiguous")                        accumulate(chains, coords);
     if (props.ferry_car)                                            accumulate(ferry, coords);
+    if (props.car_shuttle)                                          accumulate(carShuttle, coords);
     if (props.seasonal_status === "winter_closure")                 accumulate(winterClosures, coords);
     if (props.seasonal_status === "winter_only_road")               accumulate(winterOnlyRoads, coords);
   }
@@ -193,7 +197,7 @@ export function analyzeRoute(map: MLMap, routeCoords: [number, number][]): Route
     })
     .filter((c) => c.vignette || (c.hasTolls && c.tollConfirmed));
 
-  return { countries, tollSegments, tollPoints, chains, ferry, lez, winterClosures, winterOnlyRoads };
+  return { countries, tollSegments, tollPoints, chains, ferry, carShuttle, lez, winterClosures, winterOnlyRoads };
 }
 
 // ── DOM renderer ─────────────────────────────────────────────────────────────
@@ -212,11 +216,11 @@ export function renderSummary(
   container.innerHTML = "";
 
   const { countries, tollSegments, tollPoints, chains,
-          ferry, lez, winterClosures, winterOnlyRoads } = summary;
+          ferry, carShuttle, lez, winterClosures, winterOnlyRoads } = summary;
 
   const hasAnything = countries.length > 0 ||
     tollSegments.count > 0 || tollPoints.count > 0 ||
-    chains.count > 0 || ferry.count > 0 || lez.count > 0 ||
+    chains.count > 0 || ferry.count > 0 || carShuttle.count > 0 || lez.count > 0 ||
     winterClosures.count > 0 || winterOnlyRoads.count > 0;
 
   if (!hasAnything) {
@@ -317,6 +321,14 @@ export function renderSummary(
       "⛴️",
       ferry,
       n => `Car ferry: ${n} crossing${n > 1 ? "s" : ""}`,
+    ));
+
+  if (carShuttle.count > 0)
+    conditions.push(countRow(
+      "🚂",
+      carShuttle,
+      n => `Car-shuttle train/tunnel: ${n} section${n > 1 ? "s" : ""}`,
+      "Drive your car onto the train or through the tunnel",
     ));
 
   if (lez.count > 0)

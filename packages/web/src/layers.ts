@@ -4,12 +4,13 @@ const SOURCE = "restrictions";
 const SOURCE_LAYER = "restrictions";
 
 // Layer IDs exposed for toggle logic
-export const TOLL_LAYER_IDS   = ["toll-hitbox",   "toll-explicit"]              as const;
-export const CHAINS_LAYER_IDS = ["chains-hitbox",  "chains-any"] as const;
-export const FERRY_LAYER_IDS  = ["ferry-hitbox",   "ferry-car"]                 as const;
-export const LEZ_LAYER_IDS    = ["lez-fill",       "lez-outline"]               as const;
-export const SEASONAL_LAYER_IDS   = ["seasonal-hitbox", "seasonal-winter-closure", "seasonal-winter-only"] as const;
-export const TOLL_POINT_LAYER_IDS = ["toll-point"] as const;
+export const TOLL_LAYER_IDS        = ["toll-hitbox",       "toll-explicit"]                                as const;
+export const CHAINS_LAYER_IDS      = ["chains-hitbox",     "chains-any"]                                  as const;
+export const FERRY_LAYER_IDS       = ["ferry-hitbox",      "ferry-car"]                                   as const;
+export const CAR_SHUTTLE_LAYER_IDS = ["car-shuttle-hitbox","car-shuttle-line"]                            as const;
+export const LEZ_LAYER_IDS         = ["lez-fill",          "lez-outline"]                                 as const;
+export const SEASONAL_LAYER_IDS    = ["seasonal-hitbox",   "seasonal-winter-closure","seasonal-winter-only"] as const;
+export const TOLL_POINT_LAYER_IDS  = ["toll-point"]                                                       as const;
 
 const base = { type: "line" as const, source: SOURCE, "source-layer": SOURCE_LAYER, minzoom: 3 };
 
@@ -175,6 +176,26 @@ export const overlayLayers: LayerSpecification[] = [
       "circle-stroke-color": "#fff",
       "circle-stroke-width": 1.5,
       "circle-opacity": 0.85,
+    },
+  },
+
+  // ── Car shuttle trains / tunnels ─────────────────────────────────────────
+  // route=shuttle_train (Eurotunnel, ROLA, Autozug) and service=car_shuttle.
+  // Distinct from ferries: purple colour, shorter dash pattern.
+
+  {
+    ...base, id: "car-shuttle-hitbox",
+    filter: ["==", ["get", "car_shuttle"], true],
+    paint: { "line-color": "transparent", "line-width": 20, "line-opacity": 0 },
+  },
+  {
+    ...base, id: "car-shuttle-line",
+    filter: ["==", ["get", "car_shuttle"], true],
+    paint: {
+      "line-color": "#7b1fa2",
+      "line-width": ["interpolate", ["linear"], ["zoom"], 5, 1.5, 12, 3.5],
+      "line-dasharray": [3, 2],
+      "line-opacity": 0.9,
     },
   },
 

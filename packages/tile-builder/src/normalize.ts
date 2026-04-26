@@ -113,9 +113,14 @@ try {
     }
 
     // Hard gate: must be a road (highway=*), a ferry (route=ferry),
+    // a car-shuttle train/tunnel (route=shuttle_train / service=car_shuttle),
     // a low-emission zone polygon, or a toll-booth node.
-    const isHighway   = typeof tags["highway"] === "string" && tags["highway"] !== "";
-    const isFerry     = tags["route"] === "ferry";
+    const isHighway    = typeof tags["highway"] === "string" && tags["highway"] !== "";
+    const isFerry      = tags["route"] === "ferry";
+    // Car-shuttle trains/tunnels (Eurotunnel, ROLA, Autozug, etc.)
+    const isCarShuttle = tags["route"] === "shuttle_train"
+                      || tags["service"] === "car_shuttle"
+                      || tags["public_transport:type"] === "car_shuttle";
     // Accept both the canonical boundary= tag and the secondary
     // low_emission_zone=yes that some mappers use on its own.
     const isLEZ       = tags["boundary"] === "low_emission_zone"
@@ -123,7 +128,7 @@ try {
     const isTollBooth = osmType === "node"
                      && (tags["barrier"] === "toll_booth"
                       || tags["highway"] === "toll_gantry");
-    if (!isHighway && !isFerry && !isLEZ && !isTollBooth) continue;
+    if (!isHighway && !isFerry && !isCarShuttle && !isLEZ && !isTollBooth) continue;
 
     // Toll booth nodes → emit immediately as a point feature and move on.
     if (isTollBooth) {
@@ -192,16 +197,21 @@ try {
                       || tags["motorcar"] === "no";
     const ferryOk = isFerryRoute && allowsCars && !carsBlocked;
 
-    // Ferries never belong in the toll layer, even if they don't pass the
-    // strict ferry-qualification check (no motor_vehicle=yes etc.). A
-    // route=ferry tagged toll=yes without car-access info is just an
-    // unqualified ferry — drop it from toll, not promote it to a road.
-    const tollIncluded     = !isFerryRoute && toll.status !== "unknown";
-    const chainsIncluded   = chains.status !== "unknown";
-    const seasonalIncluded = !isFerryRoute && seasonal.status !== "unknown";
-    if (!tollIncluded && !chainsIncluded && !ferryOk && !seasonalIncluded) continue;
+    // Car shuttle: route=shuttle_train / service=car_shuttle etc.
+    // The shuttle type itself already implies car transport, so we accept
+    // it unless cars are *explicitly* blocked. Positive access tags are
+    // preferred but not required (unlike plain ferries which are often
+    // foot/bike-only and need explicit motorcar=yes to qualify).
+    const carShuttleOk = isCarShuttle && !carsBlocked;
 
-    const outProps: TileProperties & { ferry_car?: boolean } = {
+    // Ferries and car shuttles never belong in the toll or chains layers.
+    const isSpecialRoute = isFerryRoute || isCarShuttle;
+    const tollIncluded     = !isSpecialRoute && toll.status !== "unknown";
+    const chainsIncluded   = !isCarShuttle && chains.status !== "unknown";
+    const seasonalIncluded = !isSpecialRoute && seasonal.status !== "unknown";
+    if (!tollIncluded && !chainsIncluded && !ferryOk && !carShuttleOk && !seasonalIncluded) continue;
+
+    const outProps: TileProperties = {
       osm_type: osmType,
       osm_id: osmId,
       ...(tollIncluded && {
@@ -219,7 +229,8 @@ try {
           seasonal_months: seasonal.months.join(","),
         }),
       }),
-      ...(ferryOk && { ferry_car: true }),
+      ...(ferryOk      && { ferry_car:   true }),
+      ...(carShuttleOk && { car_shuttle: true }),
     };
 
     stdout.write(
