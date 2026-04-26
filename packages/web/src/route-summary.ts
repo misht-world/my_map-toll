@@ -165,16 +165,43 @@ export function analyzeRoute(map: MLMap, routeCoords: [number, number][]): Route
     if (props.seasonal_status === "winter_only_road")               accumulate(winterOnlyRoads, coords);
   }
 
-  // ── Detect countries (sample route points, check against bbox table) ──────
-  const step = Math.max(1, Math.floor(routeCoords.length / 40));
-  const sample = routeCoords.filter((_, i) => i % step === 0);
+  // ── Detect countries: distance-based, not point-sampling ────────────────
+  // Walk every consecutive pair of route coordinates. For each segment
+  // assign its length to the country whose bbox contains its midpoint.
+  // Only countries where the accumulated length exceeds MIN_KM_IN_COUNTRY
+  // are included — this eliminates false positives from overlapping bboxes
+  // (e.g. Italy's bbox covers northern Adriatic and overlaps with HU/AT).
+  const MIN_KM_IN_COUNTRY = 15; // must travel ≥ 15 km within a country's bbox
 
-  const detected = new Set<string>();
-  for (const [lon, lat] of sample) {
+  function haversineKm(a: [number, number], b: [number, number]): number {
+    const R = 6371;
+    const dLat = (b[1] - a[1]) * Math.PI / 180;
+    const dLon = (b[0] - a[0]) * Math.PI / 180;
+    const sinDLat = Math.sin(dLat / 2);
+    const sinDLon = Math.sin(dLon / 2);
+    const h = sinDLat * sinDLat
+            + Math.cos(a[1] * Math.PI / 180) * Math.cos(b[1] * Math.PI / 180) * sinDLon * sinDLon;
+    return 2 * R * Math.asin(Math.sqrt(h));
+  }
+
+  const countryKm = new Map<string, number>();
+  for (let i = 0; i < routeCoords.length - 1; i++) {
+    const a = routeCoords[i]!;
+    const b = routeCoords[i + 1]!;
+    const midLon = (a[0] + b[0]) / 2;
+    const midLat = (a[1] + b[1]) / 2;
+    const segKm  = haversineKm(a, b);
     for (const [code, info] of Object.entries(COUNTRY_TOLL_INFO)) {
       const [cW, cS, cE, cN] = info.bbox;
-      if (lon >= cW && lon <= cE && lat >= cS && lat <= cN) detected.add(code);
+      if (midLon >= cW && midLon <= cE && midLat >= cS && midLat <= cN) {
+        countryKm.set(code, (countryKm.get(code) ?? 0) + segKm);
+      }
     }
+  }
+
+  const detected = new Set<string>();
+  for (const [code, km] of countryKm) {
+    if (km >= MIN_KM_IN_COUNTRY) detected.add(code);
   }
 
   const anyTollFound = tollSegments.count > 0 || tollPoints.count > 0;
