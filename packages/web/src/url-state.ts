@@ -39,20 +39,25 @@ export function parseHash(hash: string, fallback: UrlState): UrlState {
   const layers = params.get("layers");
   if (layers !== null) {
     const set = new Set(layers.split(",").map((s) => s.trim()).filter(Boolean));
-    // `v` is a hash format version. New URLs we write include v=2, meaning
-    // the layer list is authoritative — anything missing is off. Old URLs
-    // (no v) predate later layers (e.g. lez): for missing layers we fall
-    // back to the default rather than treating them as deliberately off.
-    const authoritative = params.has("v");
-    const get = (name: keyof UrlState["layers"], def: boolean) =>
-      set.has(name) ? true : (authoritative ? false : def);
+    // `v` is a hash format version:
+    //   (none) – pre-versioned URLs: layer list is not authoritative, fall back to defaults.
+    //   v=2    – layer list is authoritative for the original set of layers
+    //            (toll, chains, ferry, lez, seasonal). Newer layers (added in v=3+)
+    //            fall back to defaults so old shared links don't hide new layers.
+    //   v=3+   – fully authoritative for all layers including carShuttle.
+    const v = parseInt(params.get("v") ?? "0", 10);
+    // Returns true if the layer name is present in the URL set;
+    // false if the URL is authoritative for this layer and it's absent;
+    // `def` if the URL predates this layer (not yet authoritative for it).
+    const get = (name: keyof UrlState["layers"], def: boolean, introducedInV: number) =>
+      set.has(name) ? true : (v >= introducedInV ? false : def);
     out.layers = {
-      toll:       get("toll",       fallback.layers.toll),
-      chains:     get("chains",     fallback.layers.chains),
-      ferry:      get("ferry",      fallback.layers.ferry),
-      carShuttle: get("carShuttle", fallback.layers.carShuttle),
-      lez:        get("lez",        fallback.layers.lez),
-      seasonal:   get("seasonal",   fallback.layers.seasonal),
+      toll:       get("toll",       fallback.layers.toll,       2),
+      chains:     get("chains",     fallback.layers.chains,     2),
+      ferry:      get("ferry",      fallback.layers.ferry,      2),
+      lez:        get("lez",        fallback.layers.lez,        2),
+      seasonal:   get("seasonal",   fallback.layers.seasonal,   2),
+      carShuttle: get("carShuttle", fallback.layers.carShuttle, 3), // added in v=3
     };
   }
 
@@ -72,6 +77,6 @@ export function formatHash(state: UrlState): string {
   const params = new URLSearchParams();
   params.set("map", mapParam);
   params.set("layers", activeLayers.join(","));
-  params.set("v", "2"); // see parseHash for semantics
+  params.set("v", "3"); // see parseHash for semantics
   return "#" + params.toString();
 }
