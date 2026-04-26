@@ -8,7 +8,7 @@ import { parseCoords } from "./search.js";
 import { parseHash, formatHash, type UrlState } from "./url-state.js";
 import { renderPopup } from "./popup.js";
 import { geocode, fetchRoute, fmtDistance, fmtDuration, toGpx } from "./routing.js";
-import { analyzeRoute, renderSummary } from "./route-summary.js";
+import { analyzeRoute, renderSummary, fetchRouteCountries } from "./route-summary.js";
 
 // ---------------------------------------------------------------------------
 // PMTiles protocol
@@ -414,6 +414,9 @@ const wpListEl      = document.getElementById("route-wp-list")      as HTMLEleme
 const summaryEl     = document.getElementById("route-summary")      as HTMLElement;
 
 let routeGeometry: GeoJSON.LineString | null = null;
+// AbortController for the in-flight Nominatim country-detection request.
+// Cancelled when the user clears the route or a new route is calculated.
+let countryAbort: AbortController | null = null;
 
 type WpRole = "start" | "via" | "end";
 function wpRole(i: number): WpRole {
@@ -562,21 +565,36 @@ async function rebuildRoute() {
   );
 
   // After fitBounds the map loads tiles for the full route extent.
-  // Wait for "idle" (all tiles rendered) then run the restriction analysis.
+  // Wait for "idle" (all tiles rendered) then run the two-phase analysis:
+  //   Phase 1 (sync)  — PMTiles restriction scan → renders road conditions.
+  //   Phase 2 (async) — Nominatim reverse-geocode 7 points → adds Road costs.
   summaryEl.hidden = true;
   summaryEl.innerHTML = "";
+  // Cancel any in-flight country detection from a previous route.
+  countryAbort?.abort();
   map.once("idle", () => {
+    countryAbort = new AbortController();
+    const { signal } = countryAbort;
+
     const summary = analyzeRoute(map, coords);
-    renderSummary(summary, summaryEl, (bbox) => {
-      map.fitBounds(
-        [[bbox[0], bbox[1]], [bbox[2], bbox[3]]],
-        { padding: 80, maxZoom: 14 },
-      );
+    const onFlyTo = (bbox: [number, number, number, number]) =>
+      map.fitBounds([[bbox[0], bbox[1]], [bbox[2], bbox[3]]], { padding: 80, maxZoom: 14 });
+
+    // Phase 1: show restrictions immediately (countries array is empty here).
+    renderSummary(summary, summaryEl, onFlyTo);
+
+    // Phase 2: detect countries, then re-render with country info.
+    const anyToll = summary.tollSegments.count > 0 || summary.tollPoints.count > 0;
+    void fetchRouteCountries(coords, anyToll, signal).then(countries => {
+      if (signal.aborted) return; // route was cleared or recalculated
+      renderSummary({ ...summary, countries }, summaryEl, onFlyTo);
     });
   });
 }
 
 function clearAllRoute() {
+  countryAbort?.abort();
+  countryAbort = null;
   wps.forEach(w => w.marker.remove());
   wps.length = 0;
   renderWpList();

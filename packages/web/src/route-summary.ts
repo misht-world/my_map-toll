@@ -1,14 +1,20 @@
 /**
  * Route summary: spatial analysis of what restrictions lie on the calculated
- * route, combined with the country-level vignette/toll table.
+ * route, combined with country detection via Nominatim reverse geocoding.
  *
- * Analysis uses map.querySourceFeatures() (data already in PMTiles tiles that
- * were loaded when the route was fitted into view) — no external API needed.
+ * Restriction analysis: synchronous, uses map.querySourceFeatures() on the
+ * PMTiles data already loaded in the viewport.
+ *
+ * Country detection: asynchronous, calls Nominatim /reverse for 7 evenly-
+ * spaced route points in parallel. Returns real country codes, not bbox guesses,
+ * so even routes running close to a border don't pick up the wrong country.
  */
 
 import type { Map as MLMap } from "maplibre-gl";
 import type { TileProperties } from "@mmt/model";
 import { COUNTRY_TOLL_INFO } from "./vignette-countries.js";
+
+const NOM_REVERSE = "https://nominatim.openstreetmap.org/reverse";
 
 // ── Geometry helpers ─────────────────────────────────────────────────────────
 
@@ -165,66 +171,110 @@ export function analyzeRoute(map: MLMap, routeCoords: [number, number][]): Route
     if (props.seasonal_status === "winter_only_road")               accumulate(winterOnlyRoads, coords);
   }
 
-  // ── Detect countries: distance-based, not point-sampling ────────────────
-  // Walk every consecutive pair of route coordinates. For each segment
-  // assign its length to the country whose bbox contains its midpoint.
-  // Only countries where the accumulated length exceeds MIN_KM_IN_COUNTRY
-  // are included — this eliminates false positives from overlapping bboxes
-  // (e.g. Italy's bbox covers northern Adriatic and overlaps with HU/AT).
-  const MIN_KM_IN_COUNTRY = 15; // must travel ≥ 15 km within a country's bbox
+  // Countries are detected asynchronously via fetchRouteCountries().
+  // analyzeRoute() itself returns an empty list so the caller can render
+  // road-conditions immediately while country detection is in flight.
+  return { countries: [], tollSegments, tollPoints, chains, ferry, carShuttle, lez, winterClosures, winterOnlyRoads };
+}
 
-  function haversineKm(a: [number, number], b: [number, number]): number {
-    const R = 6371;
-    const dLat = (b[1] - a[1]) * Math.PI / 180;
-    const dLon = (b[0] - a[0]) * Math.PI / 180;
-    const sinDLat = Math.sin(dLat / 2);
-    const sinDLon = Math.sin(dLon / 2);
-    const h = sinDLat * sinDLat
-            + Math.cos(a[1] * Math.PI / 180) * Math.cos(b[1] * Math.PI / 180) * sinDLon * sinDLon;
-    return 2 * R * Math.asin(Math.sqrt(h));
+// ── Country detection via Nominatim reverse geocoding ────────────────────────
+
+/** Haversine distance in km between two [lon, lat] points. */
+function haversineKm(a: [number, number], b: [number, number]): number {
+  const R = 6371;
+  const dLat = (b[1] - a[1]) * Math.PI / 180;
+  const dLon = (b[0] - a[0]) * Math.PI / 180;
+  const sinDLat = Math.sin(dLat / 2);
+  const sinDLon = Math.sin(dLon / 2);
+  const h = sinDLat * sinDLat
+          + Math.cos(a[1] * Math.PI / 180) * Math.cos(b[1] * Math.PI / 180) * sinDLon * sinDLon;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+/**
+ * Pick N points evenly distributed by distance along the route.
+ * Avoids the index-based approach which over-samples dense city segments.
+ */
+function sampleByDistance(coords: [number, number][], n: number): [number, number][] {
+  if (coords.length === 0) return [];
+  if (n <= 1) return [coords[0]!];
+  if (coords.length <= n) return [...coords];
+
+  // Build cumulative distance array.
+  const cum: number[] = [0];
+  for (let i = 1; i < coords.length; i++) {
+    cum.push(cum[i - 1]! + haversineKm(coords[i - 1]!, coords[i]!));
   }
+  const total = cum[cum.length - 1]!;
+  if (total === 0) return [coords[0]!];
 
-  const countryKm = new Map<string, number>();
-  for (let i = 0; i < routeCoords.length - 1; i++) {
-    const a = routeCoords[i]!;
-    const b = routeCoords[i + 1]!;
-    const midLon = (a[0] + b[0]) / 2;
-    const midLat = (a[1] + b[1]) / 2;
-    const segKm  = haversineKm(a, b);
-    for (const [code, info] of Object.entries(COUNTRY_TOLL_INFO)) {
-      const [cW, cS, cE, cN] = info.bbox;
-      if (midLon >= cW && midLon <= cE && midLat >= cS && midLat <= cN) {
-        countryKm.set(code, (countryKm.get(code) ?? 0) + segKm);
-      }
+  const samples: [number, number][] = [];
+  for (let s = 0; s < n; s++) {
+    const target = (s / (n - 1)) * total;
+    // Binary search for the index closest to target distance.
+    let lo = 0, hi = cum.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (cum[mid]! < target) lo = mid + 1; else hi = mid;
     }
+    samples.push(coords[lo]!);
   }
+  return samples;
+}
+
+type CountryEntry = RouteSummary["countries"][number];
+
+/**
+ * Detect countries along the route via Nominatim reverse geocoding.
+ * Samples 7 evenly-spaced points, fires all requests in parallel.
+ *
+ * @param anyTollFound  Whether PMTiles found toll features on this route.
+ *                      Controls whether non-vignette toll countries are shown.
+ * @param signal        Optional AbortSignal — pass one so the caller can cancel
+ *                      when the user clears the route or recalculates.
+ */
+export async function fetchRouteCountries(
+  routeCoords: [number, number][],
+  anyTollFound: boolean,
+  signal?: AbortSignal,
+): Promise<CountryEntry[]> {
+  if (routeCoords.length === 0) return [];
+
+  const samples = sampleByDistance(routeCoords, 7);
+
+  // Fire all reverse-geocode requests in parallel.
+  // zoom=3 returns country-level results without over-fetching.
+  const settled = await Promise.allSettled(
+    samples.map(([lon, lat]) =>
+      fetch(
+        `${NOM_REVERSE}?format=json&lat=${lat.toFixed(5)}&lon=${lon.toFixed(5)}&zoom=3`,
+        { signal, headers: { "User-Agent": "RoadRestrictionsMap/1.0" } },
+      )
+        .then(r => (r.ok ? r.json() : null) as Promise<{ address?: { country_code?: string } } | null>)
+        .then(d => d?.address?.country_code?.toUpperCase() ?? null),
+    ),
+  );
 
   const detected = new Set<string>();
-  for (const [code, km] of countryKm) {
-    if (km >= MIN_KM_IN_COUNTRY) detected.add(code);
+  for (const r of settled) {
+    if (r.status === "fulfilled" && r.value) detected.add(r.value);
   }
 
-  const anyTollFound = tollSegments.count > 0 || tollPoints.count > 0;
-
-  // Build country list:
-  // • Vignette countries: always shown when on route.
-  // • Non-vignette toll countries: shown only when PMTiles found toll features.
-  const countries = [...detected]
-    .map((code) => {
+  return [...detected]
+    .filter(code => code in COUNTRY_TOLL_INFO)
+    .map(code => {
       const info = COUNTRY_TOLL_INFO[code]!;
       return {
         code,
-        name: info.name,
-        vignette: info.vignette,
-        vignetteNote: info.vignetteNote,
-        hasTolls: info.hasTolls,
+        name:          info.name,
+        vignette:      info.vignette,
+        vignetteNote:  info.vignetteNote,
+        hasTolls:      info.hasTolls,
         extraTollNote: info.extraTollNote,
         tollConfirmed: anyTollFound,
       };
     })
-    .filter((c) => c.vignette || (c.hasTolls && c.tollConfirmed));
-
-  return { countries, tollSegments, tollPoints, chains, ferry, carShuttle, lez, winterClosures, winterOnlyRoads };
+    .filter(c => c.vignette || (c.hasTolls && c.tollConfirmed));
 }
 
 // ── DOM renderer ─────────────────────────────────────────────────────────────
