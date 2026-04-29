@@ -47,6 +47,12 @@ export function renderPopup(props: TileProperties, lngLat: LngLat): HTMLElement 
   if ((props as Record<string, unknown>)["ferry_car"]) {
     lines.push(`<div class="popup-status">⛴ Car ferry</div>`);
   }
+  if ((props as Record<string, unknown>)["car_shuttle"]) {
+    lines.push(
+      `<div class="popup-status">🚂 Car-shuttle train / tunnel</div>`,
+      `<div class="popup-reason">Drive your car onto the train or through the tunnel. Check timetable and booking before travel.</div>`,
+    );
+  }
   if (props.seasonal_status && props.seasonal_status !== "unknown") {
     const label = props.seasonal_status === "winter_only_road"
       ? "Winter-only road (e.g. ice road / winter track)"
