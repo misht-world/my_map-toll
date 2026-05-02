@@ -131,7 +131,7 @@ export interface TileProperties {
   /** Comma-separated month abbreviations of affected/closed period. */
   seasonal_months?: string;
   /** Discriminator for non-line features. */
-  kind?: "lez" | "toll_point";
+  kind?: "lez" | "toll_point" | "border_control";
   /** OSM `name=*` tag, used by zone features (LEZ) for popup labels. */
   name?: string;
   /** True for car-capable ferries. */

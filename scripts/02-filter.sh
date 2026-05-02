@@ -48,6 +48,7 @@ osmium tags-filter --overwrite -o "$OUT" "$IN" \
   r/low_emission_zone=yes \
   w/low_emission_zone=yes \
   n/barrier=toll_booth \
-  n/highway=toll_gantry
+  n/highway=toll_gantry \
+  n/barrier=border_control
 
 echo "[filter] done: $(du -h "$OUT" | cut -f1)"

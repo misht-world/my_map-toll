@@ -13,7 +13,7 @@ export interface UrlState {
   zoom: number;
   lat: number;
   lon: number;
-  layers: { toll: boolean; chains: boolean; ferry: boolean; carShuttle: boolean; lez: boolean; seasonal: boolean };
+  layers: { toll: boolean; chains: boolean; ferry: boolean; carShuttle: boolean; lez: boolean; seasonal: boolean; border: boolean };
 }
 
 export function parseHash(hash: string, fallback: UrlState): UrlState {
@@ -44,7 +44,8 @@ export function parseHash(hash: string, fallback: UrlState): UrlState {
     //   v=2    – layer list is authoritative for the original set of layers
     //            (toll, chains, ferry, lez, seasonal). Newer layers (added in v=3+)
     //            fall back to defaults so old shared links don't hide new layers.
-    //   v=3+   – fully authoritative for all layers including carShuttle.
+    //   v=3    – fully authoritative for v2 layers + carShuttle.
+    //   v=4+   – fully authoritative for all layers including border.
     const v = parseInt(params.get("v") ?? "0", 10);
     // Returns true if the layer name is present in the URL set;
     // false if the URL is authoritative for this layer and it's absent;
@@ -58,6 +59,7 @@ export function parseHash(hash: string, fallback: UrlState): UrlState {
       lez:        get("lez",        fallback.layers.lez,        2),
       seasonal:   get("seasonal",   fallback.layers.seasonal,   2),
       carShuttle: get("carShuttle", fallback.layers.carShuttle, 3), // added in v=3
+      border:     get("border",     fallback.layers.border,     4), // added in v=4
     };
   }
 
@@ -73,10 +75,11 @@ export function formatHash(state: UrlState): string {
     state.layers.carShuttle ? "carShuttle" : null,
     state.layers.lez        ? "lez"        : null,
     state.layers.seasonal   ? "seasonal"   : null,
+    state.layers.border     ? "border"     : null,
   ].filter(Boolean);
   const params = new URLSearchParams();
   params.set("map", mapParam);
   params.set("layers", activeLayers.join(","));
-  params.set("v", "3"); // see parseHash for semantics
+  params.set("v", "4"); // see parseHash for semantics
   return "#" + params.toString();
 }

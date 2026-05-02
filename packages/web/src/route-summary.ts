@@ -12,7 +12,7 @@
 
 import type { Map as MLMap } from "maplibre-gl";
 import type { TileProperties } from "@mmt/model";
-import { COUNTRY_TOLL_INFO } from "./vignette-countries.js";
+import { COUNTRY_TOLL_INFO, type CountryTollInfo } from "./vignette-countries.js";
 
 const NOM_REVERSE = "https://nominatim.openstreetmap.org/reverse";
 
@@ -95,6 +95,18 @@ export interface CategoryStats {
   bbox: [number, number, number, number] | null;
 }
 
+/** Classification of a country-to-country transition along the route. */
+export type BorderType =
+  | "open"         // Schengen ↔ Schengen — no passport control
+  | "eu-internal"  // EU ↔ EU but at least one outside Schengen — passport check
+  | "external";    // External Schengen/EU border — passport + visa rules
+
+export interface BorderCrossing {
+  from: { code: string; name: string };
+  to:   { code: string; name: string };
+  type: BorderType;
+}
+
 export interface RouteSummary {
   /** Countries the route passes through, enriched with toll/vignette metadata. */
   countries: Array<{
@@ -107,8 +119,11 @@ export interface RouteSummary {
     /** True when PMTiles found actual tagged toll features on this route. */
     tollConfirmed: boolean;
   }>;
+  /** Ordered country-to-country transitions encountered along the route. */
+  borderCrossings: BorderCrossing[];
   tollSegments:   CategoryStats;
   tollPoints:     CategoryStats;
+  borderPoints:   CategoryStats;
   chains:         CategoryStats;
   ferry:          CategoryStats;
   carShuttle:     CategoryStats;
@@ -138,6 +153,7 @@ export function analyzeRoute(map: MLMap, routeCoords: [number, number][]): Route
 
   const tollSegments    = emptyStats();
   const tollPoints      = emptyStats();
+  const borderPoints    = emptyStats();
   const chains          = emptyStats();
   const ferry           = emptyStats();
   const carShuttle      = emptyStats();
@@ -158,8 +174,9 @@ export function analyzeRoute(map: MLMap, routeCoords: [number, number][]): Route
     if (coords.length === 0) continue;
     if (!isNearRoute(coords, routeCoords, bbox)) continue;
 
-    if (props.kind === "toll_point") { accumulate(tollPoints, coords); continue; }
-    if (props.kind === "lez")        { accumulate(lez, coords);        continue; }
+    if (props.kind === "toll_point")     { accumulate(tollPoints, coords);   continue; }
+    if (props.kind === "border_control") { accumulate(borderPoints, coords); continue; }
+    if (props.kind === "lez")            { accumulate(lez, coords);          continue; }
     if (props.toll_status === "explicit_yes" && !props.ferry_car && !props.car_shuttle)
                                                                     accumulate(tollSegments, coords);
     if (props.chains_status === "explicit" ||
@@ -171,10 +188,13 @@ export function analyzeRoute(map: MLMap, routeCoords: [number, number][]): Route
     if (props.seasonal_status === "winter_only_road")               accumulate(winterOnlyRoads, coords);
   }
 
-  // Countries are detected asynchronously via fetchRouteCountries().
-  // analyzeRoute() itself returns an empty list so the caller can render
-  // road-conditions immediately while country detection is in flight.
-  return { countries: [], tollSegments, tollPoints, chains, ferry, carShuttle, lez, winterClosures, winterOnlyRoads };
+  // Countries and borderCrossings are detected asynchronously via
+  // fetchRouteCountries(). analyzeRoute() returns empty lists so the caller
+  // can render road-conditions immediately while geocoding is in flight.
+  return {
+    countries: [], borderCrossings: [],
+    tollSegments, tollPoints, borderPoints, chains, ferry, carShuttle, lez, winterClosures, winterOnlyRoads,
+  };
 }
 
 // ── Country detection via Nominatim reverse geocoding ────────────────────────
@@ -224,9 +244,18 @@ function sampleByDistance(coords: [number, number][], n: number): [number, numbe
 
 type CountryEntry = RouteSummary["countries"][number];
 
+/** Classify the type of border between two countries. */
+function classifyBorder(a: CountryTollInfo, b: CountryTollInfo): BorderType {
+  if (a.schengen && b.schengen) return "open";
+  if (a.eu && b.eu)             return "eu-internal";
+  return "external";
+}
+
 /**
- * Detect countries along the route via Nominatim reverse geocoding.
- * Samples 7 evenly-spaced points, fires all requests in parallel.
+ * Detect countries and border crossings along the route via Nominatim
+ * reverse geocoding. Samples 7 evenly-spaced points, fires all requests
+ * in parallel. The order of samples is preserved so we can reconstruct
+ * which country borders are crossed and in which sequence.
  *
  * @param anyTollFound  Whether PMTiles found toll features on this route.
  *                      Controls whether non-vignette toll countries are shown.
@@ -237,12 +266,13 @@ export async function fetchRouteCountries(
   routeCoords: [number, number][],
   anyTollFound: boolean,
   signal?: AbortSignal,
-): Promise<CountryEntry[]> {
-  if (routeCoords.length === 0) return [];
+): Promise<{ countries: CountryEntry[]; borderCrossings: BorderCrossing[] }> {
+  if (routeCoords.length === 0) return { countries: [], borderCrossings: [] };
 
   const samples = sampleByDistance(routeCoords, 7);
 
-  // Fire all reverse-geocode requests in parallel.
+  // Fire all reverse-geocode requests in parallel; Promise.allSettled
+  // preserves input order so settled[i] corresponds to samples[i].
   // zoom=3 returns country-level results without over-fetching.
   const settled = await Promise.allSettled(
     samples.map(([lon, lat]) =>
@@ -255,12 +285,21 @@ export async function fetchRouteCountries(
     ),
   );
 
-  const detected = new Set<string>();
+  // Build an ordered list of country codes along the route, collapsing
+  // consecutive duplicates ("HU,HU,AT,AT,DE" → "HU,AT,DE"). Re-entries
+  // (e.g. "HU,SK,HU") are preserved as separate entries — they represent
+  // a real second border crossing.
+  const ordered: string[] = [];
+  let prev: string | null = null;
   for (const r of settled) {
-    if (r.status === "fulfilled" && r.value) detected.add(r.value);
+    if (r.status !== "fulfilled" || !r.value) continue;
+    if (r.value !== prev) ordered.push(r.value);
+    prev = r.value;
   }
 
-  return [...detected]
+  // Deduplicated set for the "Road costs" section.
+  const detected = new Set(ordered);
+  const countries = [...detected]
     .filter(code => code in COUNTRY_TOLL_INFO)
     .map(code => {
       const info = COUNTRY_TOLL_INFO[code]!;
@@ -275,6 +314,23 @@ export async function fetchRouteCountries(
       };
     })
     .filter(c => c.vignette || (c.hasTolls && c.tollConfirmed));
+
+  // Build crossing pairs from the ordered list. Skip pairs where either
+  // country is unknown to our table (small countries we don't track).
+  const borderCrossings: BorderCrossing[] = [];
+  for (let i = 0; i < ordered.length - 1; i++) {
+    const aCode = ordered[i]!, bCode = ordered[i + 1]!;
+    const a = COUNTRY_TOLL_INFO[aCode];
+    const b = COUNTRY_TOLL_INFO[bCode];
+    if (!a || !b) continue;
+    borderCrossings.push({
+      from: { code: aCode, name: a.name },
+      to:   { code: bCode, name: b.name },
+      type: classifyBorder(a, b),
+    });
+  }
+
+  return { countries, borderCrossings };
 }
 
 // ── DOM renderer ─────────────────────────────────────────────────────────────
@@ -292,11 +348,11 @@ export function renderSummary(
 ): void {
   container.innerHTML = "";
 
-  const { countries, tollSegments, tollPoints, chains,
+  const { countries, borderCrossings, tollSegments, tollPoints, borderPoints, chains,
           ferry, carShuttle, lez, winterClosures, winterOnlyRoads } = summary;
 
-  const hasAnything = countries.length > 0 ||
-    tollSegments.count > 0 || tollPoints.count > 0 ||
+  const hasAnything = countries.length > 0 || borderCrossings.length > 0 ||
+    tollSegments.count > 0 || tollPoints.count > 0 || borderPoints.count > 0 ||
     chains.count > 0 || ferry.count > 0 || carShuttle.count > 0 || lez.count > 0 ||
     winterClosures.count > 0 || winterOnlyRoads.count > 0;
 
@@ -379,6 +435,43 @@ export function renderSummary(
       } else {
         root.appendChild(row("💰", `<b>${c.name}</b> — toll roads`));
       }
+    }
+  }
+
+  // ── Border crossings section ──────────────────────────────────────────────
+  if (borderCrossings.length > 0 || borderPoints.count > 0) {
+    const hdr = document.createElement("div");
+    hdr.className = "rs-header";
+    hdr.textContent = "Border crossings";
+    root.appendChild(hdr);
+
+    for (const c of borderCrossings) {
+      const icon = c.type === "open" ? "🟢" : c.type === "eu-internal" ? "🟡" : "🔴";
+      const note = c.type === "open"
+        ? "Schengen — no passport control"
+        : c.type === "eu-internal"
+          ? "EU border — passport check, free movement for EU citizens"
+          : "External border — passport check, visa rules may apply";
+      root.appendChild(row(icon, `<b>${c.from.name}</b> → <b>${c.to.name}</b>`, note));
+    }
+
+    // Physical border-control checkpoints found on the route (zoom link).
+    if (borderPoints.count > 0) {
+      root.appendChild(countRow(
+        "🛂",
+        borderPoints,
+        n => `Border-control checkpoint${n > 1 ? `s: ${n}` : ""}`,
+      ));
+    }
+
+    // Disclaimer about citizenship-dependent visa rules.
+    if (borderCrossings.length > 0) {
+      const disclaimer = document.createElement("div");
+      disclaimer.className = "rs-row";
+      disclaimer.innerHTML =
+        `<span class="rs-icon">ℹ️</span>` +
+        `<span class="rs-text rs-sub">Visa requirements depend on your citizenship — check official sources before travel.</span>`;
+      root.appendChild(disclaimer);
     }
   }
 

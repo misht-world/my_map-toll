@@ -148,6 +148,16 @@ details.block > .block-body { padding-top: 6px; }
   box-shadow: 0 0 0 1.5px var(--toll-yes);
   flex-shrink: 0;
 }
+/* Border control: small indigo circle, distinct from toll-point */
+.sw-border-control {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #3949ab;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1.5px #3949ab;
+  flex-shrink: 0;
+}
 .sw-toll-cond   { background: var(--toll-cond); }
 .sw-toll-amb    { background: var(--toll-amb); border: 1px dashed #555; }
 .sw-chains-yes  { background: var(--chains-yes); }

@@ -22,6 +22,14 @@ export function renderPopup(props: TileProperties, lngLat: LngLat): HTMLElement 
     );
   }
 
+  if (props.kind === "border_control") {
+    const name = (props.name && props.name.length > 0) ? props.name : "Border control";
+    lines.push(
+      `<div class="popup-status">🛂 ${escapeHtml(name)}</div>`,
+      `<div class="popup-reason">Border crossing point. Carry valid travel documents; visa requirements depend on your citizenship.</div>`,
+    );
+  }
+
   if (props.kind === "lez") {
     const name = (props.name && props.name.length > 0) ? props.name : "Low emission zone";
     const subtype = detectLezSubtype(name);

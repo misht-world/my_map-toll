@@ -11,6 +11,7 @@ export const CAR_SHUTTLE_LAYER_IDS = ["car-shuttle-hitbox","car-shuttle-line"]  
 export const LEZ_LAYER_IDS         = ["lez-fill",          "lez-outline"]                                 as const;
 export const SEASONAL_LAYER_IDS    = ["seasonal-hitbox",   "seasonal-winter-closure","seasonal-winter-only"] as const;
 export const TOLL_POINT_LAYER_IDS  = ["toll-point"]                                                       as const;
+export const BORDER_LAYER_IDS      = ["border-control"]                                                    as const;
 
 const base = { type: "line" as const, source: SOURCE, "source-layer": SOURCE_LAYER, minzoom: 3 };
 
@@ -176,6 +177,26 @@ export const overlayLayers: LayerSpecification[] = [
       "circle-stroke-color": "#fff",
       "circle-stroke-width": 1.5,
       "circle-opacity": 0.85,
+    },
+  },
+
+  // ── Border control points ─────────────────────────────────────────────────
+  // barrier=border_control nodes — physical border crossing checkpoints.
+  // Indigo circle, slightly larger than toll-point so they stand out.
+
+  {
+    id: "border-control",
+    type: "circle",
+    source: SOURCE,
+    "source-layer": SOURCE_LAYER,
+    minzoom: 7,
+    filter: ["==", ["get", "kind"], "border_control"],
+    paint: {
+      "circle-radius": ["interpolate", ["linear"], ["zoom"], 7, 3.5, 13, 8],
+      "circle-color": "#3949ab",
+      "circle-stroke-color": "#fff",
+      "circle-stroke-width": 1.5,
+      "circle-opacity": 0.9,
     },
   },
 

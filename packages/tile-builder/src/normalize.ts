@@ -128,7 +128,8 @@ try {
     const isTollBooth = osmType === "node"
                      && (tags["barrier"] === "toll_booth"
                       || tags["highway"] === "toll_gantry");
-    if (!isHighway && !isFerry && !isCarShuttle && !isLEZ && !isTollBooth) continue;
+    const isBorderControl = osmType === "node" && tags["barrier"] === "border_control";
+    if (!isHighway && !isFerry && !isCarShuttle && !isLEZ && !isTollBooth && !isBorderControl) continue;
 
     // Toll booth nodes → emit immediately as a point feature and move on.
     if (isTollBooth) {
@@ -136,6 +137,21 @@ try {
         osm_type: "node",
         osm_id: osmId,
         kind: "toll_point",
+      };
+      stdout.write(
+        JSON.stringify({ type: "Feature", geometry: feat.geometry, properties: props }) + "\n",
+      );
+      counters.emitted++;
+      continue;
+    }
+
+    // Border-control nodes → emit immediately as a point feature.
+    if (isBorderControl) {
+      const props: TileProperties = {
+        osm_type: "node",
+        osm_id: osmId,
+        kind: "border_control",
+        name: tags["name"] ?? "",
       };
       stdout.write(
         JSON.stringify({ type: "Feature", geometry: feat.geometry, properties: props }) + "\n",

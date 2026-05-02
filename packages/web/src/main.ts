@@ -3,7 +3,7 @@ import { Protocol } from "pmtiles";
 import type { TileProperties } from "@mmt/model";
 
 import { config } from "./config.js";
-import { overlayLayers, TOLL_LAYER_IDS, CHAINS_LAYER_IDS, FERRY_LAYER_IDS, CAR_SHUTTLE_LAYER_IDS, LEZ_LAYER_IDS, SEASONAL_LAYER_IDS, TOLL_POINT_LAYER_IDS } from "./layers.js";
+import { overlayLayers, TOLL_LAYER_IDS, CHAINS_LAYER_IDS, FERRY_LAYER_IDS, CAR_SHUTTLE_LAYER_IDS, LEZ_LAYER_IDS, SEASONAL_LAYER_IDS, TOLL_POINT_LAYER_IDS, BORDER_LAYER_IDS } from "./layers.js";
 import { parseCoords } from "./search.js";
 import { parseHash, formatHash, type UrlState } from "./url-state.js";
 import { renderPopup } from "./popup.js";
@@ -23,7 +23,7 @@ const defaultState: UrlState = {
   zoom: config.defaultView.zoom,
   lat: config.defaultView.center[1],
   lon: config.defaultView.center[0],
-  layers: { toll: true, chains: true, ferry: true, carShuttle: true, lez: true, seasonal: true },
+  layers: { toll: true, chains: true, ferry: true, carShuttle: true, lez: true, seasonal: true, border: true },
 };
 const initial = parseHash(window.location.hash, defaultState);
 
@@ -40,12 +40,14 @@ const ferryToggle      = document.getElementById("toggle-ferry")        as HTMLI
 const carShuttleToggle = document.getElementById("toggle-car-shuttle")  as HTMLInputElement;
 const lezToggle        = document.getElementById("toggle-lez")          as HTMLInputElement;
 const seasonalToggle   = document.getElementById("toggle-seasonal")     as HTMLInputElement;
+const borderToggle     = document.getElementById("toggle-border")       as HTMLInputElement;
 tollToggle.checked       = initial.layers.toll;
 chainsToggle.checked     = initial.layers.chains;
 ferryToggle.checked      = initial.layers.ferry;
 carShuttleToggle.checked = initial.layers.carShuttle ?? true;
 lezToggle.checked        = initial.layers.lez;
 seasonalToggle.checked   = initial.layers.seasonal;
+borderToggle.checked     = initial.layers.border ?? true;
 
 // ---------------------------------------------------------------------------
 // Map
@@ -172,6 +174,7 @@ function applyLayerVisibility() {
   set(CAR_SHUTTLE_LAYER_IDS, carShuttleToggle.checked);
   set(LEZ_LAYER_IDS,         lezToggle.checked);
   set(SEASONAL_LAYER_IDS,    seasonalToggle.checked);
+  set(BORDER_LAYER_IDS,      borderToggle.checked);
   syncHash();
 }
 tollToggle.addEventListener("change",         applyLayerVisibility);
@@ -180,6 +183,7 @@ ferryToggle.addEventListener("change",        applyLayerVisibility);
 carShuttleToggle.addEventListener("change",   applyLayerVisibility);
 lezToggle.addEventListener("change",          applyLayerVisibility);
 seasonalToggle.addEventListener("change",     applyLayerVisibility);
+borderToggle.addEventListener("change",       applyLayerVisibility);
 
 // ---------------------------------------------------------------------------
 // Basemap style switcher
@@ -201,12 +205,12 @@ styleSelect.addEventListener("change", () => {
 // ---------------------------------------------------------------------------
 // Click → popup  (pass click lngLat for Google Maps link)
 // ---------------------------------------------------------------------------
-const interactiveLayers = [...TOLL_LAYER_IDS, ...CHAINS_LAYER_IDS, ...FERRY_LAYER_IDS, ...CAR_SHUTTLE_LAYER_IDS, ...LEZ_LAYER_IDS, ...SEASONAL_LAYER_IDS, ...TOLL_POINT_LAYER_IDS]
+const interactiveLayers = [...TOLL_LAYER_IDS, ...CHAINS_LAYER_IDS, ...FERRY_LAYER_IDS, ...CAR_SHUTTLE_LAYER_IDS, ...LEZ_LAYER_IDS, ...SEASONAL_LAYER_IDS, ...TOLL_POINT_LAYER_IDS, ...BORDER_LAYER_IDS]
   .filter(id => !id.endsWith("-hitbox"));
 
 // Hitbox layers are for hit-testing, visible layers for display.
 // LEZ fill itself is a generous hit-area (whole polygon).
-const allClickLayers = [...TOLL_LAYER_IDS, ...CHAINS_LAYER_IDS, ...FERRY_LAYER_IDS, ...CAR_SHUTTLE_LAYER_IDS, ...LEZ_LAYER_IDS, ...SEASONAL_LAYER_IDS, ...TOLL_POINT_LAYER_IDS];
+const allClickLayers = [...TOLL_LAYER_IDS, ...CHAINS_LAYER_IDS, ...FERRY_LAYER_IDS, ...CAR_SHUTTLE_LAYER_IDS, ...LEZ_LAYER_IDS, ...SEASONAL_LAYER_IDS, ...TOLL_POINT_LAYER_IDS, ...BORDER_LAYER_IDS];
 
 map.on("click", (e) => {
   const features = map.queryRenderedFeatures(e.point, { layers: allClickLayers });
@@ -322,7 +326,7 @@ function syncHash() {
     const c = map.getCenter();
     const next = formatHash({
       zoom: map.getZoom(), lat: c.lat, lon: c.lng,
-      layers: { toll: tollToggle.checked, chains: chainsToggle.checked, ferry: ferryToggle.checked, carShuttle: carShuttleToggle.checked, lez: lezToggle.checked, seasonal: seasonalToggle.checked },
+      layers: { toll: tollToggle.checked, chains: chainsToggle.checked, ferry: ferryToggle.checked, carShuttle: carShuttleToggle.checked, lez: lezToggle.checked, seasonal: seasonalToggle.checked, border: borderToggle.checked },
     });
     if (next !== window.location.hash) history.replaceState(null, "", next);
   }, 200);
@@ -339,6 +343,7 @@ window.addEventListener("hashchange", () => {
   carShuttleToggle.checked = s.layers.carShuttle;
   lezToggle.checked        = s.layers.lez;
   seasonalToggle.checked   = s.layers.seasonal;
+  borderToggle.checked     = s.layers.border;
   applyLayerVisibility();
 });
 
@@ -351,7 +356,7 @@ shareBtn.addEventListener("click", async () => {
   const c = map.getCenter();
   const hash = formatHash({
     zoom: map.getZoom(), lat: c.lat, lon: c.lng,
-    layers: { toll: tollToggle.checked, chains: chainsToggle.checked, ferry: ferryToggle.checked, carShuttle: carShuttleToggle.checked, lez: lezToggle.checked, seasonal: seasonalToggle.checked },
+    layers: { toll: tollToggle.checked, chains: chainsToggle.checked, ferry: ferryToggle.checked, carShuttle: carShuttleToggle.checked, lez: lezToggle.checked, seasonal: seasonalToggle.checked, border: borderToggle.checked },
   });
   const url = `${window.location.origin}${window.location.pathname}${hash}`;
   try {
@@ -583,11 +588,11 @@ async function rebuildRoute() {
     // Phase 1: show restrictions immediately (countries array is empty here).
     renderSummary(summary, summaryEl, onFlyTo);
 
-    // Phase 2: detect countries, then re-render with country info.
+    // Phase 2: detect countries + border crossings, then re-render.
     const anyToll = summary.tollSegments.count > 0 || summary.tollPoints.count > 0;
-    void fetchRouteCountries(coords, anyToll, signal).then(countries => {
+    void fetchRouteCountries(coords, anyToll, signal).then(({ countries, borderCrossings }) => {
       if (signal.aborted) return; // route was cleared or recalculated
-      renderSummary({ ...summary, countries }, summaryEl, onFlyTo);
+      renderSummary({ ...summary, countries, borderCrossings }, summaryEl, onFlyTo);
     });
   });
 }
