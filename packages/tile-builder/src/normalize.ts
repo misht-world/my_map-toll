@@ -125,7 +125,28 @@ try {
     // low_emission_zone=yes that some mappers use on its own.
     const isLEZ       = tags["boundary"] === "low_emission_zone"
                      || tags["low_emission_zone"] === "yes";
+    // Toll booth / gantry — but skip HGV-only ones and weigh stations
+    // since they don't affect car drivers. Common patterns:
+    //   service=weigh_station       — truck weigh station, never for cars
+    //   motorcar=no / motor_vehicle=no — explicitly excludes cars
+    //   vehicle:type=hgv            — gantry dedicated to trucks
+    //   hgv:toll=yes ONLY (no toll=yes or toll:motorcar=yes) — only trucks pay
+    const isCarTollPoint =
+         tags["service"]       !== "weigh_station"
+      && tags["motorcar"]      !== "no"
+      && tags["motor_vehicle"] !== "no"
+      && tags["vehicle:type"]  !== "hgv"
+      // If only HGV-toll markers are present, this is a truck-only gantry.
+      // Cars passing under it are not tolled, so don't show on a car map.
+      && !(
+           (tags["toll:hgv"] === "yes" || tags["hgv:toll"] === "yes")
+        && tags["toll"]          !== "yes"
+        && tags["toll:motorcar"] !== "yes"
+        && tags["toll:motor_vehicle"] !== "yes"
+      );
+
     const isTollBooth = osmType === "node"
+                     && isCarTollPoint
                      && (tags["barrier"] === "toll_booth"
                       || tags["highway"] === "toll_gantry");
     const isBorderControl = osmType === "node" && tags["barrier"] === "border_control";
